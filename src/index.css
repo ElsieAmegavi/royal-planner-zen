@@ -9,32 +9,39 @@ All colors MUST be HSL.
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 263 40% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 263 40% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 263 40% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Royal Purple Primary */
+    --primary: 268 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 270 100% 87%;
+    --primary-dark: 268 70% 35%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Gold Accent */
+    --accent: 45 100% 65%;
+    --accent-foreground: 263 40% 15%;
+    --accent-light: 48 100% 88%;
+    --accent-muted: 45 60% 50%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Purple Secondary */
+    --secondary: 268 50% 95%;
+    --secondary-foreground: 263 40% 25%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --muted: 270 20% 96%;
+    --muted-foreground: 263 20% 45%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 270 20% 90%;
+    --input: 270 20% 96%;
+    --ring: 268 83% 58%;
 
     --radius: 0.5rem;
 
