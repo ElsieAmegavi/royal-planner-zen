@@ -29,6 +29,7 @@ const Settings = () => {
   });
   
   const [newGrade, setNewGrade] = useState({ name: "", points: "" });
+  const [editingGrade, setEditingGrade] = useState<{ name: string; points: number } | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -102,6 +103,46 @@ const Settings = () => {
       ...prev,
       [newGrade.name]: points
     }));
+    setNewGrade({ name: "", points: "" });
+  };
+
+  const editGrade = (gradeName: string, points: number) => {
+    setEditingGrade({ name: gradeName, points });
+    setNewGrade({ name: gradeName, points: points.toString() });
+  };
+
+  const updateGrade = () => {
+    if (!editingGrade || !newGrade.name || !newGrade.points) return;
+    
+    const points = parseFloat(newGrade.points);
+    if (isNaN(points) || points < 0 || points > 4) {
+      toast({
+        title: "Invalid Points",
+        description: "Points must be a number between 0 and 4",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setGradeSettings(prev => {
+      const updated = { ...prev };
+      if (editingGrade.name !== newGrade.name) {
+        delete updated[editingGrade.name];
+      }
+      updated[newGrade.name] = points;
+      return updated;
+    });
+    
+    setEditingGrade(null);
+    setNewGrade({ name: "", points: "" });
+    toast({
+      title: "Grade Updated",
+      description: "Grade has been updated successfully"
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingGrade(null);
     setNewGrade({ name: "", points: "" });
   };
 
@@ -269,6 +310,14 @@ const Settings = () => {
                         </div>
                         <Button
                           variant="ghost"
+                          size="sm"
+                          onClick={() => editGrade(grade, points)}
+                          className="text-primary hover:text-primary-foreground hover:bg-primary mr-1"
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
                           size="icon"
                           onClick={() => removeGrade(grade)}
                           className="text-destructive hover:text-destructive-foreground hover:bg-destructive"
@@ -282,7 +331,9 @@ const Settings = () => {
                   <Separator />
                   
                   <div className="space-y-4">
-                    <h4 className="font-medium">Add Custom Grade</h4>
+                    <h4 className="font-medium">
+                      {editingGrade ? "Edit Grade" : "Add Custom Grade"}
+                    </h4>
                     <div className="flex gap-3">
                       <Input
                         placeholder="Grade (e.g., A+)"
@@ -300,9 +351,20 @@ const Settings = () => {
                         onChange={(e) => setNewGrade(prev => ({ ...prev, points: e.target.value }))}
                         className="w-32"
                       />
-                      <Button onClick={addCustomGrade}>
-                        <Plus className="h-4 w-4" />
-                      </Button>
+                      {editingGrade ? (
+                        <>
+                          <Button onClick={updateGrade}>
+                            Update
+                          </Button>
+                          <Button onClick={cancelEdit} variant="outline">
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button onClick={addCustomGrade}>
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                   

@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout";
+import { TargetGradeEstimator } from "@/components/TargetGradeEstimator";
 
 const Target = () => {
   return (
@@ -11,9 +12,7 @@ const Target = () => {
               Set your academic goals and see what grades you need to achieve them
             </p>
           </div>
-          <div className="text-center py-12 text-muted-foreground">
-            <p>Target Grade Estimator coming soon!</p>
-          </div>
+          <TargetGradeEstimator />
         </div>
       </div>
     </Layout>

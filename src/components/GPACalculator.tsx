@@ -301,7 +301,7 @@ export const GPACalculator = () => {
                     </div>
                     <Progress 
                       value={Math.min((cumulativeGPA / 4.0) * 100, 100)} 
-                      className="[&>div]:bg-accent-light bg-accent-dark/30" 
+                      className="[&>div]:bg-primary bg-primary/20" 
                     />
                   </div>
                 </div>
