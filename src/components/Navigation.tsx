@@ -8,7 +8,8 @@ import {
   Settings, 
   Menu, 
   X,
-  Crown
+  Crown,
+  Bell
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ const navItems = [
   { name: "Target Grades", path: "/target", icon: Target },
   { name: "Planner", path: "/planner", icon: Calendar },
   { name: "Journal", path: "/journal", icon: BookOpen },
+  { name: "Notifications", path: "/notifications", icon: Bell },
   { name: "Settings", path: "/settings", icon: Settings },
 ];
 

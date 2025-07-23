@@ -28,6 +28,18 @@ const Settings = () => {
     weeklyReports: false
   });
   
+  const [notificationTimings, setNotificationTimings] = useState({
+    assignmentFrequency: "24",
+    deadlineTimings: ["2", "24"]
+  });
+  
+  const [security, setSecurity] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+    twoFactorEnabled: false
+  });
+  
   const [newGrade, setNewGrade] = useState({ name: "", points: "" });
   const [editingGrade, setEditingGrade] = useState<{ name: string; points: number } | null>(null);
   const { toast } = useToast();
@@ -156,9 +168,37 @@ const Settings = () => {
 
   const saveNotifications = () => {
     localStorage.setItem('notificationSettings', JSON.stringify(notifications));
+    localStorage.setItem('notificationTimings', JSON.stringify(notificationTimings));
     toast({
       title: "Notification Settings Saved",
       description: "Your notification preferences have been updated."
+    });
+  };
+
+  const changePassword = () => {
+    if (security.newPassword !== security.confirmPassword) {
+      toast({
+        title: "Password Mismatch",
+        description: "New passwords do not match",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (security.newPassword.length < 6) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // In a real app, verify current password first
+    setSecurity(prev => ({ ...prev, currentPassword: "", newPassword: "", confirmPassword: "" }));
+    toast({
+      title: "Password Changed",
+      description: "Your password has been updated successfully."
     });
   };
 
@@ -203,7 +243,7 @@ const Settings = () => {
           </div>
 
           <Tabs defaultValue="profile" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="profile" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
                 Profile
@@ -215,6 +255,10 @@ const Settings = () => {
               <TabsTrigger value="notifications" className="flex items-center gap-2">
                 <Bell className="h-4 w-4" />
                 Notifications
+              </TabsTrigger>
+              <TabsTrigger value="security" className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Security
               </TabsTrigger>
               <TabsTrigger value="data" className="flex items-center gap-2">
                 <Download className="h-4 w-4" />
@@ -384,31 +428,157 @@ const Settings = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    {Object.entries(notifications).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label className="text-base font-medium capitalize">
-                            {key.replace(/([A-Z])/g, ' $1').trim()}
-                          </Label>
-                          <p className="text-sm text-muted-foreground">
-                            {key === 'assignments' && 'Get notified about upcoming assignments'}
-                            {key === 'deadlines' && 'Receive deadline reminders'}
-                            {key === 'gpaUpdates' && 'Get updates when your GPA changes'}
-                            {key === 'weeklyReports' && 'Receive weekly academic progress reports'}
-                          </p>
-                        </div>
-                        <Switch
-                          checked={value}
-                          onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, [key]: checked }))}
-                        />
-                      </div>
-                    ))}
-                  </div>
+                   <div className="space-y-6">
+                     {Object.entries(notifications).map(([key, value]) => (
+                       <div key={key} className="space-y-4">
+                         <div className="flex items-center justify-between">
+                           <div className="space-y-0.5">
+                             <Label className="text-base font-medium capitalize">
+                               {key.replace(/([A-Z])/g, ' $1').trim()}
+                             </Label>
+                             <p className="text-sm text-muted-foreground">
+                               {key === 'assignments' && 'Get notified about upcoming assignments'}
+                               {key === 'deadlines' && 'Receive deadline reminders'}
+                               {key === 'gpaUpdates' && 'Get updates when your GPA changes'}
+                               {key === 'weeklyReports' && 'Receive weekly academic progress reports'}
+                             </p>
+                           </div>
+                           <Switch
+                             checked={value}
+                             onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, [key]: checked }))}
+                           />
+                         </div>
+                         
+                         {key === 'assignments' && value && (
+                           <div className="ml-4 space-y-2">
+                             <Label className="text-sm font-medium">Assignment Reminder Frequency</Label>
+                             <Select 
+                               value={notificationTimings.assignmentFrequency} 
+                               onValueChange={(val) => setNotificationTimings(prev => ({ ...prev, assignmentFrequency: val }))}
+                             >
+                               <SelectTrigger className="w-full">
+                                 <SelectValue />
+                               </SelectTrigger>
+                               <SelectContent>
+                                 <SelectItem value="1">1 hour before</SelectItem>
+                                 <SelectItem value="2">2 hours before</SelectItem>
+                                 <SelectItem value="6">6 hours before</SelectItem>
+                                 <SelectItem value="12">12 hours before</SelectItem>
+                                 <SelectItem value="24">24 hours before</SelectItem>
+                                 <SelectItem value="48">48 hours before</SelectItem>
+                               </SelectContent>
+                             </Select>
+                           </div>
+                         )}
+                         
+                         {key === 'deadlines' && value && (
+                           <div className="ml-4 space-y-2">
+                             <Label className="text-sm font-medium">Deadline Reminder Times</Label>
+                             <div className="space-y-2">
+                               {["1", "2", "6", "12", "24", "48"].map((hours) => (
+                                 <div key={hours} className="flex items-center space-x-2">
+                                   <input
+                                     type="checkbox"
+                                     id={`deadline-${hours}`}
+                                     checked={notificationTimings.deadlineTimings.includes(hours)}
+                                     onChange={(e) => {
+                                       if (e.target.checked) {
+                                         setNotificationTimings(prev => ({
+                                           ...prev,
+                                           deadlineTimings: [...prev.deadlineTimings, hours]
+                                         }));
+                                       } else {
+                                         setNotificationTimings(prev => ({
+                                           ...prev,
+                                           deadlineTimings: prev.deadlineTimings.filter(t => t !== hours)
+                                         }));
+                                       }
+                                     }}
+                                     className="rounded border-gray-300 text-primary focus:ring-primary"
+                                   />
+                                   <Label htmlFor={`deadline-${hours}`} className="text-sm">
+                                     {hours} hour{hours !== "1" ? "s" : ""} before
+                                   </Label>
+                                 </div>
+                               ))}
+                             </div>
+                           </div>
+                         )}
+                       </div>
+                     ))}
+                   </div>
                   
                   <Button onClick={saveNotifications} className="w-full md:w-auto">
                     Save Notification Settings
                   </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="security" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Security Settings</CardTitle>
+                  <CardDescription>
+                    Manage your password and account security preferences
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Change Password</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="currentPassword">Current Password</Label>
+                        <Input
+                          id="currentPassword"
+                          type="password"
+                          value={security.currentPassword}
+                          onChange={(e) => setSecurity(prev => ({ ...prev, currentPassword: e.target.value }))}
+                          placeholder="Enter current password"
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="newPassword">New Password</Label>
+                          <Input
+                            id="newPassword"
+                            type="password"
+                            value={security.newPassword}
+                            onChange={(e) => setSecurity(prev => ({ ...prev, newPassword: e.target.value }))}
+                            placeholder="Enter new password"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                          <Input
+                            id="confirmPassword"
+                            type="password"
+                            value={security.confirmPassword}
+                            onChange={(e) => setSecurity(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                            placeholder="Confirm new password"
+                          />
+                        </div>
+                      </div>
+                      <Button onClick={changePassword} className="w-full md:w-auto">
+                        Change Password
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-base font-medium">Two-Factor Authentication</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Add an extra layer of security to your account
+                      </p>
+                    </div>
+                    <Switch
+                      checked={security.twoFactorEnabled}
+                      onCheckedChange={(checked) => setSecurity(prev => ({ ...prev, twoFactorEnabled: checked }))}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

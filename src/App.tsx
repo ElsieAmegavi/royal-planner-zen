@@ -8,6 +8,7 @@ import GPA from "./pages/GPA";
 import Target from "./pages/Target";
 import Planner from "./pages/Planner";
 import Journal from "./pages/Journal";
+import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/target" element={<Target />} />
           <Route path="/planner" element={<Planner />} />
           <Route path="/journal" element={<Journal />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/auth" element={<Auth />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
