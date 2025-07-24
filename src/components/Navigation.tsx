@@ -12,6 +12,8 @@ import {
   Bell
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ProfileMenu } from "@/components/ProfileMenu";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -28,17 +30,28 @@ export const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
 
+  // Mock notification count
+  const notificationCount = 3;
+
   return (
     <>
-      {/* Mobile Menu Button */}
-      <Button
-        variant="outline"
-        size="icon"
-        className="fixed top-4 left-4 z-50 md:hidden bg-background/80 backdrop-blur-sm"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        {isOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-      </Button>
+      {/* Top Header */}
+      <header className="fixed top-0 right-0 left-0 md:left-64 h-16 bg-background/80 backdrop-blur-sm border-b border-border z-40 flex items-center justify-between px-4">
+        {/* Mobile Menu Button */}
+        <Button
+          variant="outline"
+          size="icon"
+          className="md:hidden bg-background/80 backdrop-blur-sm"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          {isOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </Button>
+        
+        {/* Profile Menu */}
+        <div className="ml-auto">
+          <ProfileMenu />
+        </div>
+      </header>
 
       {/* Sidebar */}
       <nav className={cn(
@@ -69,7 +82,7 @@ export const Navigation = () => {
                     to={item.path}
                     onClick={() => setIsOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-sm font-medium",
+                      "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-sm font-medium relative",
                       isActive 
                         ? "bg-primary text-primary-foreground shadow-lg" 
                         : "text-foreground hover:bg-primary/10 hover:text-primary"
@@ -77,6 +90,14 @@ export const Navigation = () => {
                   >
                     <Icon className="h-5 w-5" />
                     {item.name}
+                    {item.name === "Notifications" && notificationCount > 0 && (
+                      <Badge 
+                        variant="destructive" 
+                        className="ml-auto h-5 w-5 flex items-center justify-center p-0 text-xs"
+                      >
+                        {notificationCount}
+                      </Badge>
+                    )}
                   </Link>
                 </li>
               );
