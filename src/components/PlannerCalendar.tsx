@@ -19,6 +19,8 @@ export interface PlannerEvent {
   date: Date;
   type: "class" | "assignment" | "deadline" | "quiz" | "exam" | "study";
   time?: string;
+  priority?: "low" | "medium" | "high";
+  reminders?: string[];
 }
 
 const eventTypeIcons = {
@@ -84,7 +86,9 @@ export const PlannerCalendar = () => {
     title: "",
     description: "",
     type: "class" as PlannerEvent["type"],
-    time: ""
+    time: "",
+    priority: "medium" as PlannerEvent["priority"],
+    reminders: [] as string[]
   });
   const { toast } = useToast();
 
@@ -110,7 +114,9 @@ export const PlannerCalendar = () => {
       description: formData.description,
       date: selectedDate,
       type: formData.type,
-      time: formData.time || undefined
+      time: formData.time || undefined,
+      priority: formData.priority,
+      reminders: formData.reminders
     };
 
     setEvents([...events, newEvent]);
@@ -127,7 +133,9 @@ export const PlannerCalendar = () => {
       title: event.title,
       description: event.description,
       type: event.type,
-      time: event.time || ""
+      time: event.time || "",
+      priority: event.priority || "medium",
+      reminders: event.reminders || []
     });
     setIsDialogOpen(true);
   };
@@ -142,7 +150,9 @@ export const PlannerCalendar = () => {
             title: formData.title,
             description: formData.description,
             type: formData.type,
-            time: formData.time || undefined
+            time: formData.time || undefined,
+            priority: formData.priority,
+            reminders: formData.reminders
           }
         : event
     );
@@ -168,7 +178,9 @@ export const PlannerCalendar = () => {
       title: "",
       description: "",
       type: "class",
-      time: ""
+      time: "",
+      priority: "medium",
+      reminders: []
     });
     setEditingEvent(null);
     setIsDialogOpen(false);
@@ -243,6 +255,50 @@ export const PlannerCalendar = () => {
                       value={formData.time}
                       onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                     />
+                  </div>
+                  <div>
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select value={formData.priority} onValueChange={(value) => setFormData({ ...formData, priority: value as PlannerEvent["priority"] })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="reminders">Reminder Settings</Label>
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">When to send reminders:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {["30mins", "1hour", "2hours", "1day", "1week"].map((reminder) => (
+                          <label key={reminder} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={formData.reminders.includes(reminder)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData({ ...formData, reminders: [...formData.reminders, reminder] });
+                                } else {
+                                  setFormData({ ...formData, reminders: formData.reminders.filter(r => r !== reminder) });
+                                }
+                              }}
+                              className="rounded border-input"
+                            />
+                            <span className="text-sm">
+                              {reminder === "30mins" ? "30 minutes before" :
+                               reminder === "1hour" ? "1 hour before" :
+                               reminder === "2hours" ? "2 hours before" :
+                               reminder === "1day" ? "1 day before" :
+                               "1 week before"}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={resetForm}>
