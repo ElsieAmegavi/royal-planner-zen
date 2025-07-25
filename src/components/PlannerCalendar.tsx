@@ -364,20 +364,20 @@ export const PlannerCalendar = () => {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Calendar with embedded events */}
-        <Card className="lg:col-span-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Calendar with embedded events - Reduced size */}
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Calendar View</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-              <div className="lg:col-span-3">
+              <div className="lg:col-span-2">
                 <Calendar
                   mode="single"
                   selected={selectedDate}
                   onSelect={setSelectedDate}
-                  className="rounded-md border"
+                  className="rounded-md border [&_.rdp-table]:text-sm"
                   modifiers={{
                     hasEvents: (date) => getDayEvents(date).length > 0
                   }}
@@ -392,11 +392,11 @@ export const PlannerCalendar = () => {
               </div>
               
               {/* Events for Selected Day - Inside Calendar */}
-              <div className="border-l pl-4">
+              <div className="border-l pl-4 lg:col-span-2">
                 <h3 className="font-semibold mb-3">
                   {selectedDate ? format(selectedDate, "MMMM d") : "Select a Date"}
                 </h3>
-                <div className="space-y-2 max-h-80 overflow-y-auto">
+                <div className="space-y-2 max-h-64 overflow-y-auto">
                   {selectedDayEvents.length === 0 ? (
                     <p className="text-muted-foreground text-sm">
                       No events scheduled
@@ -475,7 +475,7 @@ export const PlannerCalendar = () => {
                       <h4 className="font-medium text-sm">{event.title}</h4>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {format(event.date, "MMM d")} {event.time && `at ${event.time}`}
+                      {format(event.date, "EEEE, MMM d")} at {event.time || "All day"}
                     </p>
                     <Badge className={`text-xs ${eventTypeColors[event.type]}`}>
                       {event.type}

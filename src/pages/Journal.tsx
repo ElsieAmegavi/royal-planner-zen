@@ -80,20 +80,20 @@ const Journal = () => {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-background via-primary-light/10 to-accent-light/20">
         {/* Header Section */}
-        <div className="bg-green-600 text-white p-6 mb-6">
+        <div className="bg-purple-600 text-white p-6 mb-6">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <BookOpen className="h-8 w-8" />
                 <h1 className="text-3xl font-bold">Reflection Journal</h1>
               </div>
-              <p className="text-green-100">
+              <p className="text-purple-100">
                 Track your academic journey, moods, and personal growth
               </p>
             </div>
             <Button 
               onClick={() => setIsDialogOpen(true)} 
-              className="bg-white text-green-600 hover:bg-green-50"
+              className="bg-white text-purple-600 hover:bg-purple-50"
             >
               <Plus className="h-4 w-4 mr-2" />
               New Entry
@@ -148,14 +148,14 @@ const Journal = () => {
                   {Object.entries(moodCounts).slice(0, 2).map(([mood, count]) => (
                     <div key={mood} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                        <span className="w-3 h-3 rounded-full bg-purple-500"></span>
                         <span className="capitalize">{mood}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{count}</span>
                         <div className="w-16 h-2 bg-muted rounded-full">
                           <div 
-                            className="h-full bg-green-500 rounded-full" 
+                            className="h-full bg-purple-500 rounded-full" 
                             style={{ width: `${(count / totalEntries) * 100}%` }}
                           />
                         </div>
