@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit, Trash2, Clock, BookOpen, AlertTriangle, FileText } from "lucide-react";
-import { format, isSameDay } from "date-fns";
+import { Plus, Edit, Trash2, Clock, BookOpen, AlertTriangle, FileText, Calendar as CalendarIcon } from "lucide-react";
+import { format, isSameDay, addDays, startOfWeek, isAfter, isBefore, addWeeks } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { TimetableDialog } from "./TimetableDialog";
 
 export interface PlannerEvent {
   id: string;
@@ -21,6 +22,10 @@ export interface PlannerEvent {
   time?: string;
   priority?: "low" | "medium" | "high";
   reminders?: string[];
+  isRecurring?: boolean;
+  recurringDays?: number[]; // 0-6 for Sunday-Saturday
+  courseCode?: string;
+  location?: string;
 }
 
 const eventTypeIcons = {
@@ -92,8 +97,56 @@ export const PlannerCalendar = () => {
   });
   const { toast } = useToast();
 
+  const generateRecurringEvents = (baseEvent: PlannerEvent) => {
+    if (!baseEvent.isRecurring || !baseEvent.recurringDays) return [];
+    
+    const events: PlannerEvent[] = [];
+    const today = new Date();
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+    
+    // Generate events for next 16 weeks
+    for (let week = 0; week < 16; week++) {
+      baseEvent.recurringDays.forEach(dayOfWeek => {
+        const eventDate = addDays(weekStart, week * 7 + (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+        events.push({
+          ...baseEvent,
+          id: `${baseEvent.id}-${week}-${dayOfWeek}`,
+          date: eventDate
+        });
+      });
+    }
+    
+    return events;
+  };
+
+  const getAllEventsWithRecurring = () => {
+    const allEvents = [...events];
+    const recurringEvents = events
+      .filter(event => event.isRecurring)
+      .flatMap(event => generateRecurringEvents(event));
+    
+    return [...allEvents.filter(event => !event.isRecurring), ...recurringEvents];
+  };
+
   const getDayEvents = (date: Date) => {
-    return events.filter(event => isSameDay(event.date, date));
+    const allEvents = getAllEventsWithRecurring();
+    return allEvents.filter(event => isSameDay(event.date, date));
+  };
+
+  const getUpcomingEvents = () => {
+    const allEvents = getAllEventsWithRecurring();
+    const nextTwoWeeks = addWeeks(new Date(), 2);
+    return allEvents
+      .filter(event => 
+        isAfter(event.date, new Date()) &&
+        isBefore(event.date, nextTwoWeeks)
+      )
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 5);
+  };
+
+  const handleAddTimetable = (timetable: PlannerEvent) => {
+    setEvents([...events, timetable]);
   };
 
   const selectedDayEvents = selectedDate ? getDayEvents(selectedDate) : [];
@@ -187,215 +240,258 @@ export const PlannerCalendar = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Calendar */}
-      <Card className="lg:col-span-2">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Calendar View
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  onClick={() => {
-                    resetForm();
-                    setIsDialogOpen(true);
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Event
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingEvent ? "Edit Event" : "Add New Event"}
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="title">Title *</Label>
-                    <Input
-                      id="title"
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      placeholder="Event title"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Event description"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="type">Type</Label>
-                    <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as PlannerEvent["type"] })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="class">Class</SelectItem>
-                        <SelectItem value="assignment">Assignment</SelectItem>
-                        <SelectItem value="deadline">Deadline</SelectItem>
-                        <SelectItem value="quiz">Quiz</SelectItem>
-                        <SelectItem value="exam">Exam</SelectItem>
-                        <SelectItem value="study">Study Session</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="time">Time</Label>
-                    <Input
-                      id="time"
-                      type="time"
-                      value={formData.time}
-                      onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="priority">Priority</Label>
-                    <Select value={formData.priority} onValueChange={(value) => setFormData({ ...formData, priority: value as PlannerEvent["priority"] })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="reminders">Reminder Settings</Label>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">When to send reminders:</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {["30mins", "1hour", "2hours", "1day", "1week"].map((reminder) => (
-                          <label key={reminder} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={formData.reminders.includes(reminder)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setFormData({ ...formData, reminders: [...formData.reminders, reminder] });
-                                } else {
-                                  setFormData({ ...formData, reminders: formData.reminders.filter(r => r !== reminder) });
-                                }
-                              }}
-                              className="rounded border-input"
-                            />
-                            <span className="text-sm">
-                              {reminder === "30mins" ? "30 minutes before" :
-                               reminder === "1hour" ? "1 hour before" :
-                               reminder === "2hours" ? "2 hours before" :
-                               reminder === "1day" ? "1 day before" :
-                               "1 week before"}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={resetForm}>
-                      Cancel
-                    </Button>
-                    <Button onClick={editingEvent ? handleUpdateEvent : handleAddEvent}>
-                      {editingEvent ? "Update" : "Add"} Event
-                    </Button>
+    <div className="space-y-6">
+      {/* Action Buttons */}
+      <div className="flex gap-4">
+        <TimetableDialog onAddTimetable={handleAddTimetable} />
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              onClick={() => {
+                resetForm();
+                setIsDialogOpen(true);
+              }}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add Event
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {editingEvent ? "Edit Event" : "Add New Event"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="title">Title *</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="Event title"
+                />
+              </div>
+              <div>
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Event description"
+                />
+              </div>
+              <div>
+                <Label htmlFor="type">Type</Label>
+                <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as PlannerEvent["type"] })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="class">Class</SelectItem>
+                    <SelectItem value="assignment">Assignment</SelectItem>
+                    <SelectItem value="deadline">Deadline</SelectItem>
+                    <SelectItem value="quiz">Quiz</SelectItem>
+                    <SelectItem value="exam">Exam</SelectItem>
+                    <SelectItem value="study">Study Session</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="time">Time</Label>
+                <Input
+                  id="time"
+                  type="time"
+                  value={formData.time}
+                  onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="priority">Priority</Label>
+                <Select value={formData.priority} onValueChange={(value) => setFormData({ ...formData, priority: value as PlannerEvent["priority"] })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="reminders">Reminder Settings</Label>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">When to send reminders:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {["30mins", "1hour", "2hours", "1day", "1week"].map((reminder) => (
+                      <label key={reminder} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.reminders.includes(reminder)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, reminders: [...formData.reminders, reminder] });
+                            } else {
+                              setFormData({ ...formData, reminders: formData.reminders.filter(r => r !== reminder) });
+                            }
+                          }}
+                          className="rounded border-input"
+                        />
+                        <span className="text-sm">
+                          {reminder === "30mins" ? "30 minutes before" :
+                           reminder === "1hour" ? "1 hour before" :
+                           reminder === "2hours" ? "2 hours before" :
+                           reminder === "1day" ? "1 day before" :
+                           "1 week before"}
+                        </span>
+                      </label>
+                    ))}
                   </div>
                 </div>
-              </DialogContent>
-            </Dialog>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={setSelectedDate}
-            className="rounded-md border"
-            modifiers={{
-              hasEvents: (date) => getDayEvents(date).length > 0
-            }}
-            modifiersStyles={{
-              hasEvents: {
-                fontWeight: "bold",
-                backgroundColor: "hsl(var(--primary))",
-                color: "hsl(var(--primary-foreground))"
-              }
-            }}
-          />
-        </CardContent>
-      </Card>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={resetForm}>
+                  Cancel
+                </Button>
+                <Button onClick={editingEvent ? handleUpdateEvent : handleAddEvent}>
+                  {editingEvent ? "Update" : "Add"} Event
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-      {/* Events for Selected Day */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "Select a Date"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {selectedDayEvents.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
-                No events scheduled for this day
-              </p>
-            ) : (
-              selectedDayEvents.map((event) => {
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Calendar with embedded events */}
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Calendar View</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+              <div className="lg:col-span-3">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
+                  className="rounded-md border"
+                  modifiers={{
+                    hasEvents: (date) => getDayEvents(date).length > 0
+                  }}
+                  modifiersStyles={{
+                    hasEvents: {
+                      fontWeight: "bold",
+                      backgroundColor: "hsl(var(--primary))",
+                      color: "hsl(var(--primary-foreground))"
+                    }
+                  }}
+                />
+              </div>
+              
+              {/* Events for Selected Day - Inside Calendar */}
+              <div className="border-l pl-4">
+                <h3 className="font-semibold mb-3">
+                  {selectedDate ? format(selectedDate, "MMMM d") : "Select a Date"}
+                </h3>
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {selectedDayEvents.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">
+                      No events scheduled
+                    </p>
+                  ) : (
+                    selectedDayEvents.map((event) => {
+                      const Icon = eventTypeIcons[event.type];
+                      return (
+                        <div
+                          key={event.id}
+                          className="border rounded-lg p-2 space-y-1"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-1">
+                              <Icon className="h-3 w-3" />
+                              <h4 className="font-medium text-sm">{event.title}</h4>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditEvent(event)}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Edit className="h-2 w-2" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteEvent(event.id)}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Trash2 className="h-2 w-2" />
+                              </Button>
+                            </div>
+                          </div>
+                          {event.time && (
+                            <p className="text-xs text-muted-foreground">
+                              {event.time}
+                            </p>
+                          )}
+                          {event.description && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {event.description}
+                            </p>
+                          )}
+                          <Badge className={`text-xs ${eventTypeColors[event.type]}`}>
+                            {event.type}
+                          </Badge>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Upcoming Events */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5" />
+              Upcoming Events
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {getUpcomingEvents().map((event) => {
                 const Icon = eventTypeIcons[event.type];
                 return (
-                  <div
-                    key={event.id}
-                    className="border rounded-lg p-3 space-y-2"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4" />
-                        <h4 className="font-medium">{event.title}</h4>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditEvent(event)}
-                        >
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteEvent(event.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
+                  <div key={event.id} className="border rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-4 w-4" />
+                      <h4 className="font-medium text-sm">{event.title}</h4>
                     </div>
-                    {event.time && (
-                      <p className="text-sm text-muted-foreground">
-                        {event.time}
-                      </p>
-                    )}
-                    {event.description && (
-                      <p className="text-sm text-muted-foreground">
-                        {event.description}
-                      </p>
-                    )}
-                    <Badge className={eventTypeColors[event.type]}>
-                      {event.type.charAt(0).toUpperCase() + event.type.slice(1)}
+                    <p className="text-xs text-muted-foreground">
+                      {format(event.date, "MMM d")} {event.time && `at ${event.time}`}
+                    </p>
+                    <Badge className={`text-xs ${eventTypeColors[event.type]}`}>
+                      {event.type}
                     </Badge>
                   </div>
                 );
-              })
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              })}
+              {getUpcomingEvents().length === 0 && (
+                <p className="text-muted-foreground text-sm text-center py-4">
+                  No upcoming events
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
