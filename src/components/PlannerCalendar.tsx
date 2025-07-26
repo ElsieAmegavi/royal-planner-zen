@@ -13,6 +13,7 @@ import { format, isSameDay, addDays, startOfWeek, isAfter, isBefore, addWeeks } 
 import { useToast } from "@/hooks/use-toast";
 import { TimetableDialog } from "./TimetableDialog";
 import { BulkTimetableUpload } from "./BulkTimetableUpload";
+import { WorkloadBalancer } from "./WorkloadBalancer";
 
 export interface PlannerEvent {
   id: string;
@@ -527,6 +528,16 @@ export const PlannerCalendar = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Assignment Workload Balancer */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Assignment Workload Balancer</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <WorkloadBalancer />
+        </CardContent>
+      </Card>
     </div>
   );
 };

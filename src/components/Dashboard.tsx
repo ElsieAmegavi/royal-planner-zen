@@ -12,6 +12,7 @@ import {
   Plus
 } from "lucide-react";
 import heroImage from "@/assets/hero-image.jpg";
+import { GradeAnalytics } from "./GradeAnalytics";
 
 export const Dashboard = () => {
   return (
@@ -197,6 +198,12 @@ export const Dashboard = () => {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Grade Analytics Dashboard */}
+      <div className="px-6 mb-8">
+        <h2 className="text-2xl font-bold mb-6">Grade Analytics Dashboard</h2>
+        <GradeAnalytics />
       </div>
 
       {/* Recent Journal Entry */}
