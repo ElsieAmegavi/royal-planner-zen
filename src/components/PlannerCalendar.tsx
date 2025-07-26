@@ -12,6 +12,7 @@ import { Plus, Edit, Trash2, Clock, BookOpen, AlertTriangle, FileText, Calendar 
 import { format, isSameDay, addDays, startOfWeek, isAfter, isBefore, addWeeks } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { TimetableDialog } from "./TimetableDialog";
+import { BulkTimetableUpload } from "./BulkTimetableUpload";
 
 export interface PlannerEvent {
   id: string;
@@ -149,6 +150,39 @@ export const PlannerCalendar = () => {
     setEvents([...events, timetable]);
   };
 
+  interface BulkTimetableEntry {
+    courseName: string;
+    courseCode: string;
+    instructor: string;
+    day: string;
+    startTime: string;
+    endTime: string;
+    location: string;
+    semester: string;
+    year: string;
+  }
+
+  const handleBulkUpload = (entries: BulkTimetableEntry[]) => {
+    const dayMap: { [key: string]: number } = {
+      'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 0
+    };
+
+    const newEvents: PlannerEvent[] = entries.map(entry => ({
+      id: `bulk-${Date.now()}-${Math.random()}`,
+      title: entry.courseName,
+      description: `${entry.courseCode ? entry.courseCode + ' - ' : ''}${entry.instructor ? 'Instructor: ' + entry.instructor : ''}${entry.location ? ' | Location: ' + entry.location : ''}`,
+      date: new Date(), // This will be overridden by recurring logic
+      type: "class" as PlannerEvent["type"],
+      time: entry.startTime,
+      isRecurring: true,
+      recurringDays: [dayMap[entry.day] || 1],
+      courseCode: entry.courseCode,
+      location: entry.location
+    }));
+    
+    setEvents(prev => [...prev, ...newEvents]);
+  };
+
   const selectedDayEvents = selectedDate ? getDayEvents(selectedDate) : [];
 
   const handleAddEvent = () => {
@@ -244,6 +278,7 @@ export const PlannerCalendar = () => {
       {/* Action Buttons */}
       <div className="flex gap-4">
         <TimetableDialog onAddTimetable={handleAddTimetable} />
+        <BulkTimetableUpload onUpload={handleBulkUpload} />
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button 

@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Trash2, Award, TrendingUp, Settings } from "lucide-react";
+import { Plus, Trash2, Award, TrendingUp, Settings, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import jsPDF from 'jspdf';
 
 interface Course {
   id: string;
@@ -177,6 +178,69 @@ export const GPACalculator = () => {
     return calculateSemesterGPA(allCourses);
   };
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const currentDate = new Date().toLocaleDateString();
+    
+    // Header
+    doc.setFontSize(20);
+    doc.text('Academic Performance Report', 20, 20);
+    doc.setFontSize(12);
+    doc.text(`Generated on: ${currentDate}`, 20, 30);
+    
+    // Cumulative GPA
+    doc.setFontSize(16);
+    doc.text('Academic Summary', 20, 50);
+    doc.setFontSize(12);
+    doc.text(`Cumulative GPA: ${calculateCumulativeGPA().toFixed(2)}`, 20, 60);
+    doc.text(`Total Credits: ${semesters.flatMap(s => s.courses).reduce((sum, course) => sum + course.credits, 0)}`, 20, 70);
+    doc.text(`Total Semesters: ${semesters.length}`, 20, 80);
+    
+    let yPosition = 100;
+    
+    semesters.forEach((semester, index) => {
+      if (yPosition > 250) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      
+      // Semester header
+      doc.setFontSize(14);
+      doc.text(`Year ${semester.year} - Semester ${semester.semester}`, 20, yPosition);
+      doc.text(`GPA: ${semester.gpa.toFixed(2)}`, 140, yPosition);
+      yPosition += 10;
+      
+      // Course headers
+      doc.setFontSize(10);
+      doc.text('Course Name', 20, yPosition);
+      doc.text('Credits', 80, yPosition);
+      doc.text('Grade', 110, yPosition);
+      doc.text('Points', 140, yPosition);
+      yPosition += 5;
+      
+      // Courses
+      semester.courses.forEach(course => {
+        if (yPosition > 270) {
+          doc.addPage();
+          yPosition = 20;
+        }
+        doc.text(course.name.substring(0, 25), 20, yPosition);
+        doc.text(course.credits.toString(), 80, yPosition);
+        doc.text(course.grade, 110, yPosition);
+        doc.text(course.points.toFixed(2), 140, yPosition);
+        yPosition += 5;
+      });
+      
+      yPosition += 10;
+    });
+    
+    doc.save(`Academic_Report_${currentDate.replace(/\//g, '_')}.pdf`);
+    toast({
+      title: "PDF Generated",
+      description: "Your academic report has been downloaded successfully."
+    });
+  };
+
   const currentSemesterData = getCurrentSemesterData();
   const currentSemesterGPA = currentSemesterData?.gpa || 0;
   const currentSemesterCredits = currentSemesterData?.courses.reduce((sum, course) => sum + course.credits, 0) || 0;
@@ -288,8 +352,19 @@ export const GPACalculator = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-4xl font-bold mb-2">
-                  {cumulativeGPA.toFixed(2)}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-4xl font-bold">
+                    {cumulativeGPA.toFixed(2)}
+                  </div>
+                  <Button
+                    onClick={exportToPDF}
+                    variant="outline"
+                    size="sm"
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export PDF
+                  </Button>
                 </div>
                 <div className="space-y-2 opacity-90">
                   <p className="text-sm">Total Credits: {totalCredits}</p>
