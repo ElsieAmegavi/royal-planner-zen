@@ -330,7 +330,7 @@ const Settings = () => {
         gpaUpdates: notifications.gpaUpdates,
         weeklyReports: notifications.weeklyReports,
         assignmentFrequency: notificationTimings.assignmentFrequency,
-        deadlineTimings: JSON.stringify(notificationTimings.deadlineTimings)
+        deadlineTimings: notificationTimings.deadlineTimings
       });
       
       // Also save to localStorage as backup
