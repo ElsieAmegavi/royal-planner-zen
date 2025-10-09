@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -13,8 +14,84 @@ import {
 } from "lucide-react";
 import heroImage from "@/assets/hero-image.jpg";
 import { GradeAnalytics } from "./GradeAnalytics";
+import { analyticsAPI, targetGradesAPI, eventsAPI } from "@/services/api";
 
 export const Dashboard = () => {
+  const [dashboardData, setDashboardData] = useState({
+    currentGpa: 0,
+    targetGpa: 0,
+    totalCredits: 0,
+    upcomingEvents: 0,
+    isLoading: true
+  });
+
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        // Load analytics data
+        const analytics = await analyticsAPI.getCumulativeGpa();
+        
+        // Load target grade
+        let targetGpa = 0;
+        try {
+          const target = await targetGradesAPI.getTargetGrade();
+          targetGpa = target?.targetGpa || 0;
+        } catch (error) {
+          console.log('No target grade set');
+        }
+        
+        // Load upcoming events (next 7 days)
+        const events = await eventsAPI.getEvents();
+        const today = new Date();
+        const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const upcomingEvents = events.filter((event: any) => {
+          const eventDate = new Date(event.date);
+          return eventDate >= today && eventDate <= nextWeek;
+        }).length;
+        
+        setDashboardData({
+          currentGpa: analytics.cumulativeGpa,
+          targetGpa: targetGpa,
+          totalCredits: analytics.totalCredits,
+          upcomingEvents: upcomingEvents,
+          isLoading: false
+        });
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+        
+        // Fallback to localStorage
+        const semesterData = localStorage.getItem('semesterData');
+        const targetData = localStorage.getItem('targetGrade');
+        
+        let currentGpa = 0;
+        let totalCredits = 0;
+        
+        if (semesterData) {
+          const semesters = JSON.parse(semesterData);
+          const allCourses = semesters.flatMap((s: any) => s.courses);
+          
+          if (allCourses.length > 0) {
+            const totalPoints = allCourses.reduce((sum: number, course: any) => sum + (course.points * course.credits), 0);
+            totalCredits = allCourses.reduce((sum: number, course: any) => sum + course.credits, 0);
+            currentGpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
+          }
+        }
+        
+        const targetGpa = targetData ? JSON.parse(targetData).targetGPA : 0;
+        
+        setDashboardData({
+          currentGpa: currentGpa,
+          targetGpa: targetGpa,
+          totalCredits: totalCredits,
+          upcomingEvents: 0,
+          isLoading: false
+        });
+      }
+    };
+    
+    loadDashboardData();
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary-light/10 to-accent-light/20">
       {/* Hero Section */}
@@ -23,19 +100,19 @@ export const Dashboard = () => {
           className="absolute inset-0 bg-cover bg-center opacity-10"
           style={{ backgroundImage: `url(${heroImage})` }}
         />
-        <div className="relative px-6 py-12 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-4">
+        <div className="relative px-4 sm:px-6 py-8 sm:py-12 text-center">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-4">
             Welcome to Royal Planner
           </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
             Take charge of your academic journey with powerful tools designed for student success
           </p>
         </div>
       </div>
 
       {/* Quick Stats */}
-      <div className="px-6 -mt-8 relative z-10">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="px-4 sm:px-6 -mt-4 sm:-mt-8 relative z-10">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <Card className="bg-gradient-to-br from-primary to-primary-dark text-primary-foreground">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -44,8 +121,12 @@ export const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3.45</div>
-              <p className="text-xs opacity-90">+0.12 from last semester</p>
+              <div className="text-2xl font-bold">
+                {dashboardData.isLoading ? "..." : dashboardData.currentGpa.toFixed(2)}
+              </div>
+              <p className="text-xs opacity-90">
+                {dashboardData.totalCredits} total credits
+              </p>
             </CardContent>
           </Card>
 
@@ -57,8 +138,12 @@ export const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3.70</div>
-              <p className="text-xs opacity-80">Keep pushing forward!</p>
+              <div className="text-2xl font-bold">
+                {dashboardData.isLoading ? "..." : dashboardData.targetGpa.toFixed(2)}
+              </div>
+              <p className="text-xs opacity-80">
+                {dashboardData.targetGpa > 0 ? "Keep pushing forward!" : "Set your target"}
+              </p>
             </CardContent>
           </Card>
 
@@ -70,8 +155,10 @@ export const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-primary">5</div>
-              <p className="text-xs text-muted-foreground">assignments due</p>
+              <div className="text-2xl font-bold text-primary">
+                {dashboardData.isLoading ? "..." : dashboardData.upcomingEvents}
+              </div>
+              <p className="text-xs text-muted-foreground">events coming up</p>
             </CardContent>
           </Card>
 
@@ -91,9 +178,9 @@ export const Dashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="px-6 mb-8">
-        <h2 className="text-2xl font-bold mb-6">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="px-4 sm:px-6 mb-6 sm:mb-8">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer group">
             <CardHeader>
               <CardTitle className="flex items-center gap-3">
@@ -163,7 +250,7 @@ export const Dashboard = () => {
       </div>
 
       {/* Progress Toward Goals */}
-      <div className="px-6 mb-8">
+      <div className="px-4 sm:px-6 mb-6 sm:mb-8">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -201,13 +288,13 @@ export const Dashboard = () => {
       </div>
 
       {/* Grade Analytics Dashboard */}
-      <div className="px-6 mb-8">
-        <h2 className="text-2xl font-bold mb-6">Grade Analytics Dashboard</h2>
+      <div className="px-4 sm:px-6 mb-6 sm:mb-8">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Grade Analytics Dashboard</h2>
         <GradeAnalytics />
       </div>
 
       {/* Recent Journal Entry */}
-      <div className="px-6 pb-8">
+      <div className="px-4 sm:px-6 pb-6 sm:pb-8">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

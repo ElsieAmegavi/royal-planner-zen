@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, Award, TrendingUp, Settings, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { semestersAPI, gradeSettingsAPI } from "@/services/api";
 import jsPDF from 'jspdf';
 
 interface Course {
@@ -26,56 +27,90 @@ interface SemesterData {
   gpa: number;
 }
 
-const getGradePoints = (): { [key: string]: number } => {
-  const saved = localStorage.getItem('gradeSettings');
-  if (saved) {
-    return JSON.parse(saved);
+const getGradePoints = async (): Promise<{ [key: string]: number }> => {
+  try {
+    const gradeSettings = await gradeSettingsAPI.getGradeSettings();
+    console.log('inside getGradePoints gradeSettings:', gradeSettings);
+    return gradeSettings;
+  } catch (error) {
+    console.error('Failed to load grade settings:', error);
+    // Fallback to localStorage
+    const saved = localStorage.getItem('gradeSettings');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return {
+      "A+": 4.0, "A": 4.0, "A-": 3.7,
+      "B+": 3.3, "B": 3.0, "B-": 2.7,
+      "C+": 2.3, "C": 2.0, "C-": 1.7,
+      "D+": 1.3, "D": 1.0, "F": 0.0
+    };
   }
-  return {
-    "A+": 4.0, "A": 4.0, "A-": 3.7,
-    "B+": 3.3, "B": 3.0, "B-": 2.7,
-    "C+": 2.3, "C": 2.0, "C-": 1.7,
-    "D+": 1.3, "D": 1.0, "F": 0.0
-  };
 };
 
 export const GPACalculator = () => {
   const [semesters, setSemesters] = useState<SemesterData[]>([]);
   const [currentSemester, setCurrentSemester] = useState<string>("");
+  const [currentSemesterData, setCurrentSemesterData] = useState<SemesterData | null>(null);
   const [courseName, setCourseName] = useState("");
   const [credits, setCredits] = useState("");
   const [selectedGrade, setSelectedGrade] = useState("");
-  const [gradePoints, setGradePoints] = useState(getGradePoints());
+  const [gradePoints, setGradePoints] = useState<{ [key: string]: number }>({});
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+
 
   // Load data on component mount
   useEffect(() => {
-    const savedSemesters = localStorage.getItem('semesterData');
-    if (savedSemesters) {
-      const parsed = JSON.parse(savedSemesters);
-      setSemesters(parsed);
-      if (parsed.length > 0 && !currentSemester) {
-        setCurrentSemester(parsed[parsed.length - 1].id);
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Load semesters from backend (now includes courses)
+        const backendSemesters = await semestersAPI.getSemesters();
+        console.log('Loaded semesters with courses:', backendSemesters);
+        setSemesters(backendSemesters);
+
+        if (backendSemesters.length > 0 && !currentSemester) {
+          setCurrentSemester(backendSemesters[backendSemesters.length - 1].id.toString());
+        }
+        
+        // Load grade settings from backend
+        const gradeSettings = await getGradePoints();
+        console.log('gradeSettings:', gradeSettings);
+        setGradePoints(gradeSettings);
+        
+      } catch (error) {
+        console.error('Failed to load data from backend:', error);
+        
+        // Fallback to localStorage
+        const savedSemesters = localStorage.getItem('semesterData');
+        if (savedSemesters) {
+          const parsed = JSON.parse(savedSemesters);
+          setSemesters(parsed);
+          if (parsed.length > 0 && !currentSemester) {
+            setCurrentSemester(parsed[parsed.length - 1].id);
+          }
+        }
+        
+        const gradeSettings = await getGradePoints();
+        setGradePoints(gradeSettings);
+        
+        toast({
+          title: "Offline Mode",
+          description: "Using cached data. Some features may be limited.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
       }
-    }
-    
-    // Listen for grade settings changes
-    const handleStorageChange = () => {
-      setGradePoints(getGradePoints());
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+    
+    loadData();
+  }, [currentSemester, toast]);
 
-  // Save to localStorage whenever semesters change
-  useEffect(() => {
-    if (semesters.length > 0) {
-      localStorage.setItem('semesterData', JSON.stringify(semesters));
-    }
-  }, [semesters]);
-
-  const getCurrentSemesterData = () => {
-    return semesters.find(s => s.id === currentSemester);
+  const getCurrentSemesterData = (selectedSemester: string) => {
+    return semesters.find(s => s.id === selectedSemester);
   };
 
   const generateSemesters = () => {
@@ -100,23 +135,76 @@ export const GPACalculator = () => {
     return semesterList;
   };
 
-  const addNewSemester = () => {
-    const newSemesters = generateSemesters();
-    if (newSemesters.length > 0) {
-      setSemesters([...semesters, ...newSemesters]);
+  const handleSemesterChange = (selectedSemester: string) => {
+    setCurrentSemester(selectedSemester);
+    const currentSemesterResult = getCurrentSemesterData(selectedSemester);
+    console.log('Current semester data:', currentSemesterResult);
+    setCurrentSemesterData(currentSemesterResult);
+    console.log('Selected semester value:', selectedSemester);
+  };
+
+  const addNewSemester = async () => {
+    try {
+      const newSemesters = generateSemesters();
+      if (newSemesters.length === 0) {
+        toast({
+          title: "No New Semesters",
+          description: "All semesters have already been generated",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Add semesters to backend
+      for (const semester of newSemesters) {
+        await semestersAPI.createSemester({
+          year: semester.year,
+          semester: semester.semester
+        });
+      }
+
+      // Update local state
+      setSemesters(prev => [...prev, ...newSemesters]);
       if (!currentSemester) {
         setCurrentSemester(newSemesters[0].id);
       }
+      
+      toast({
+        title: "Semesters Added",
+        description: `${newSemesters.length} new semester(s) created successfully`
+      });
+    } catch (error) {
+      console.error('Failed to add semester:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add semester. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
   useEffect(() => {
-    if (semesters.length === 0) {
-      addNewSemester();
-    }
-  }, []);
+    const loadData = async () => {
+      try {
+        const backendSemesters = await semestersAPI.getSemesters();
+        console.log('Second load - semesters with courses:', backendSemesters);
+        setSemesters(backendSemesters);
+        
+        if (backendSemesters.length > 0 && !currentSemester) {
+          setCurrentSemester(backendSemesters[backendSemesters.length - 1].id.toString());
+        }
+        
+        if (backendSemesters.length === 0) {
+          addNewSemester();
+        }
+      } catch (error) {
+        console.error('Failed to load semesters:', error);
+      }
+    };
+    loadData();
+  }, [currentSemester]);
 
-  const addCourse = () => {
+  const addCourse = async () => {
     if (!courseName || !credits || !selectedGrade || !currentSemester) {
       toast({
         title: "Missing Information",
@@ -126,47 +214,71 @@ export const GPACalculator = () => {
       return;
     }
 
-    const newCourse: Course = {
-      id: Date.now().toString(),
-      name: courseName,
-      credits: parseFloat(credits),
-      grade: selectedGrade,
-      points: gradePoints[selectedGrade]
-    };
+    try {
+      const newCourse: Course = {
+        id: Date.now().toString(),
+        name: courseName,
+        credits: parseFloat(credits),
+        grade: selectedGrade,
+        points: gradePoints[selectedGrade]
+      };
 
-    setSemesters(prev => prev.map(semester => {
-      if (semester.id === currentSemester) {
-        const updatedCourses = [...semester.courses, newCourse];
-        const gpa = calculateSemesterGPA(updatedCourses);
-        return { ...semester, courses: updatedCourses, gpa };
-      }
-      return semester;
-    }));
+      // Add course to backend
+      await semestersAPI.addCourse(parseInt(currentSemester), {
+        name: newCourse.name,
+        credits: newCourse.credits,
+        grade: newCourse.grade,
+        points: newCourse.points
+      });
 
-    setCourseName("");
-    setCredits("");
-    setSelectedGrade("");
-    
-    toast({
-      title: "Course Added",
-      description: `${courseName} has been added to ${currentSemester.replace('-', ' Semester ')}`
-    });
+      // Refresh semesters data from API to get updated courses and GPA
+      const updatedSemesters = await semestersAPI.getSemesters();
+      setSemesters(updatedSemesters);
+
+      setCourseName("");
+      setCredits("");
+      setSelectedGrade("");
+      
+      toast({
+        title: "Course Added",
+        description: `${courseName} has been added to Year ${currentSemesterData?.year} - Semester ${currentSemesterData?.semester}`
+      });
+    } catch (error) {
+      console.error('Failed to add course:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add course. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const removeCourse = (courseId: string) => {
-    setSemesters(prev => prev.map(semester => {
-      if (semester.id === currentSemester) {
-        const updatedCourses = semester.courses.filter(course => course.id !== courseId);
-        const gpa = calculateSemesterGPA(updatedCourses);
-        return { ...semester, courses: updatedCourses, gpa };
-      }
-      return semester;
-    }));
+  const removeCourse = async (courseId: string) => {
+    try {
+      // Remove course from backend
+      await semestersAPI.deleteCourse(parseInt(courseId));
+
+      // Refresh semesters data from API to get updated courses and GPA
+      const updatedSemesters = await semestersAPI.getSemesters();
+      setSemesters(updatedSemesters);
+
+      toast({
+        title: "Course Removed",
+        description: "Course has been removed from the semester"
+      });
+    } catch (error) {
+      console.error('Failed to remove course:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove course. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const calculateSemesterGPA = (courses: Course[]) => {
     if (courses.length === 0) return 0;
-    
+    // console.log(courses);
     const totalPoints = courses.reduce((sum, course) => sum + (course.points * course.credits), 0);
     const totalCredits = courses.reduce((sum, course) => sum + course.credits, 0);
     
@@ -174,7 +286,8 @@ export const GPACalculator = () => {
   };
 
   const calculateCumulativeGPA = () => {
-    const allCourses = semesters.flatMap(s => s.courses);
+    const allCourses = semesters.some(s => 'courses' in s) ? semesters.flatMap(s => s.courses) : null;
+    if (!allCourses) return 0;
     return calculateSemesterGPA(allCourses);
   };
 
@@ -241,31 +354,43 @@ export const GPACalculator = () => {
     });
   };
 
-  const currentSemesterData = getCurrentSemesterData();
-  const currentSemesterGPA = currentSemesterData?.gpa || 0;
-  const currentSemesterCredits = currentSemesterData?.courses.reduce((sum, course) => sum + course.credits, 0) || 0;
+  const currentSemesterResult = getCurrentSemesterData(currentSemester);
+  //TODO: check to see whether to set the current semester data to the current semester result
+  const currentSemesterGPA = currentSemesterResult?.gpa || 0;
+  const currentSemesterCredits = currentSemesterResult?.courses?.reduce((sum, course) => sum + course.credits, 0) || 0;
   const cumulativeGPA = calculateCumulativeGPA();
-  const totalCredits = semesters.flatMap(s => s.courses).reduce((sum, course) => sum + course.credits, 0);
+  const totalCredits = semesters.some(s => s.courses) 
+    ? semesters.flatMap(s => s.courses).reduce((sum, course) => sum + course.credits, 0)
+    : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-primary-light/10 to-accent-light/20 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-background via-primary-light/10 to-accent-light/20 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">GPA Calculator</h1>
-              <p className="text-muted-foreground">
-                Calculate your semester GPA and track your academic performance
-              </p>
+        {isLoading ? (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading your academic data...</p>
             </div>
-            <Button variant="outline" onClick={() => window.location.href = '/settings'}>
-              <Settings className="h-4 w-4 mr-2" />
-              Grade Settings
-            </Button>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="mb-6 sm:mb-8">
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-bold mb-2">GPA Calculator</h1>
+                  <p className="text-muted-foreground text-sm sm:text-base">
+                    Calculate your semester GPA and track your academic performance
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => window.location.href = '/settings'} className="w-full sm:w-auto">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Grade Settings
+                </Button>
+              </div>
+            </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Add Course Form */}
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -280,7 +405,7 @@ export const GPACalculator = () => {
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="semester">Select Semester</Label>
-                <Select value={currentSemester} onValueChange={setCurrentSemester}>
+                <Select value={currentSemester} onValueChange={handleSemesterChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select semester" />
                   </SelectTrigger>
@@ -396,7 +521,11 @@ export const GPACalculator = () => {
                 </div>
                 <div className="space-y-2 opacity-90">
                   <p className="text-sm">Credits: {currentSemesterCredits}</p>
-                  <p className="text-sm">{currentSemester ? `Year ${currentSemester.split('-')[0]} - Sem ${currentSemester.split('-')[1]}` : 'No semester selected'}</p>
+                  <p className="text-sm">
+                    {currentSemester ? `Year ${currentSemesterData?.year} - Sem ${currentSemesterData?.semester}` : 'No semester selected'}
+                    {/* {currentSemester ? `Year ${currentSemester.split('-')[0]} - Sem ${currentSemester.split('-')[1]}` : 'No semester selected'} */}
+
+                    </p>
                 </div>
               </CardContent>
             </Card>
@@ -407,24 +536,26 @@ export const GPACalculator = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                {currentSemester ? `Year ${currentSemester.split('-')[0]} - Semester ${currentSemester.split('-')[1]} Courses` : 'Select a Semester'}
+                {currentSemester ? `Year ${currentSemesterData?.year} - Semester ${currentSemesterData?.semester} Courses` : 'Select a Semester'}
+                {/* {currentSemester ? `Year ${currentSemester.split('-')[0]} - Semester ${currentSemester.split('-')[1]} Courses` : 'Select a Semester'} */}
+
               </CardTitle>
               <CardDescription>
-                {currentSemesterData?.courses.length === 0 
+                {currentSemesterData?.courses?.length === 0 
                   ? "Add courses above to see them listed here"
-                  : `${currentSemesterData?.courses.length || 0} course${(currentSemesterData?.courses.length || 0) !== 1 ? 's' : ''} added`
+                  : `${currentSemesterData?.courses?.length || 0} course${(currentSemesterData?.courses?.length || 0) !== 1 ? 's' : ''} added`
                 }
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {!currentSemesterData || currentSemesterData.courses.length === 0 ? (
+              {!currentSemesterData || currentSemesterData.courses?.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Award className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No courses added yet. Start by adding your first course above!</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {currentSemesterData.courses.map((course) => (
+                  {currentSemesterData.courses?.map((course) => (
                     <div 
                       key={course.id}
                       className="flex items-center justify-between p-4 bg-secondary rounded-lg border"
@@ -487,7 +618,7 @@ export const GPACalculator = () => {
                     <div className="space-y-1">
                       <p className="text-2xl font-bold">{semester.gpa.toFixed(2)}</p>
                       <p className="text-sm text-muted-foreground">
-                        {semester.courses.length} courses • {semester.courses.reduce((sum, c) => sum + c.credits, 0)} credits
+                        {semester.courses?.length || 0} courses • {semester.courses?.reduce((sum, c) => sum + c.credits, 0) || 0} credits
                       </p>
                     </div>
                   </div>
@@ -496,6 +627,8 @@ export const GPACalculator = () => {
             </CardContent>
           </Card>
         </div>
+        </>
+      )}
       </div>
     </div>
   );

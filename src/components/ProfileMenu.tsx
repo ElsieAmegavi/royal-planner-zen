@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { 
   User, 
@@ -24,22 +24,38 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTheme } from "@/components/ThemeProvider";
 import { useToast } from "@/hooks/use-toast";
+import { authAPI } from "@/services/api";
 
 export const ProfileMenu = () => {
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
-  const [user] = useState({
+  const [user, setUser] = useState({
     name: "Student User",
     email: "student@royal.edu",
     avatar: "/placeholder.svg"
   });
 
+  useEffect(() => {
+    // Load user data from localStorage
+    const userSession = localStorage.getItem('userSession');
+    if (userSession) {
+      const sessionData = JSON.parse(userSession);
+      setUser({
+        name: sessionData.name || "Student User",
+        email: sessionData.email || "student@royal.edu",
+        avatar: "/placeholder.svg"
+      });
+    }
+  }, []);
+
   const handleLogout = () => {
+    authAPI.logout();
     toast({
       title: "Logged Out",
       description: "You have been successfully logged out"
     });
-    // In a real app, you would handle logout logic here
+    // Redirect to login page
+    window.location.href = "/";
   };
 
   return (

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { authAPI } from "@/services/api";
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
@@ -55,8 +56,14 @@ export const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }: RegisterFor
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const response = await authAPI.register({
+        fullName: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        academicLevel: formData.academicLevel
+      });
+
       // Save user profile
       localStorage.setItem('userProfile', JSON.stringify({
         name: formData.fullName,
@@ -65,19 +72,20 @@ export const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }: RegisterFor
         academicYears: "4"
       }));
 
-      localStorage.setItem('userSession', JSON.stringify({
-        email: formData.email,
-        name: formData.fullName,
-        isLoggedIn: true
-      }));
-
       toast({
         title: "Account Created!",
         description: `Welcome to Royal Planner, ${formData.fullName}!`
       });
       onRegisterSuccess();
+    } catch (error) {
+      toast({
+        title: "Registration Failed",
+        description: error instanceof Error ? error.message : "Failed to create account. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (

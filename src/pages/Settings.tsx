@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { User, GraduationCap, Bell, Palette, Download, RotateCcw, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { profileAPI, gradeSettingsAPI, notificationSettingsAPI } from "@/services/api";
 
 const Settings = () => {
   const [profile, setProfile] = useState({
@@ -42,56 +43,155 @@ const Settings = () => {
   
   const [newGrade, setNewGrade] = useState({ name: "", points: "" });
   const [editingGrade, setEditingGrade] = useState<{ name: string; points: number } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Load saved settings
-    const savedProfile = localStorage.getItem('userProfile');
-    if (savedProfile) {
-      setProfile(JSON.parse(savedProfile));
-    }
+    const loadSettings = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Load profile from backend
+        const backendProfile = await profileAPI.getProfile();
+        setProfile({
+          name: backendProfile.name || "",
+          email: backendProfile.email || "",
+          academicLevel: backendProfile.academicLevel || "",
+          academicYears: backendProfile.academicYears?.toString() || "4"
+        });
+        
+        // Load grade settings from backend
+        const backendGradeSettings = await gradeSettingsAPI.getGradeSettings();
+        console.log('Loaded grade settings from API:', backendGradeSettings);
+        setGradeSettings(backendGradeSettings);
+        
+        // Load notification settings from backend
+        const backendNotifications = await notificationSettingsAPI.getNotificationSettings();
+        setNotifications({
+          assignments: backendNotifications.assignments,
+          deadlines: backendNotifications.deadlines,
+          gpaUpdates: backendNotifications.gpaUpdates,
+          weeklyReports: backendNotifications.weeklyReports
+        });
+        
+        setNotificationTimings({
+          assignmentFrequency: backendNotifications.assignmentFrequency,
+          deadlineTimings: JSON.parse(backendNotifications.deadlineTimings)
+        });
+        
+      } catch (error) {
+        console.error('Failed to load settings from backend:', error);
+        
+        // Fallback to localStorage
+        const savedProfile = localStorage.getItem('userProfile');
+        if (savedProfile) {
+          setProfile(JSON.parse(savedProfile));
+        }
+        
+        // Try to load grade settings from API as fallback
+        try {
+          const fallbackGradeSettings = await gradeSettingsAPI.getGradeSettings();
+          setGradeSettings(fallbackGradeSettings);
+        } catch (gradeError) {
+          console.error('Failed to load grade settings from API:', gradeError);
+          // Only use localStorage as last resort
+          const savedGrades = localStorage.getItem('gradeSettings');
+          if (savedGrades) {
+            setGradeSettings(JSON.parse(savedGrades));
+          } else {
+            // Default grade settings
+            const defaultGrades = {
+              "A+": 4.0, "A": 4.0, "A-": 3.7,
+              "B+": 3.3, "B": 3.0, "B-": 2.7,
+              "C+": 2.3, "C": 2.0, "C-": 1.7,
+              "D+": 1.3, "D": 1.0, "F": 0.0
+            };
+            setGradeSettings(defaultGrades);
+          }
+        }
+        
+        const savedNotifications = localStorage.getItem('notificationSettings');
+        if (savedNotifications) {
+          setNotifications(JSON.parse(savedNotifications));
+        }
+        
+        toast({
+          title: "Offline Mode",
+          description: "Using cached settings. Some features may be limited.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
     
-    const savedGrades = localStorage.getItem('gradeSettings');
-    if (savedGrades) {
-      setGradeSettings(JSON.parse(savedGrades));
-    } else {
-      // Default grade settings
-      const defaultGrades = {
-        "A+": 4.0, "A": 4.0, "A-": 3.7,
-        "B+": 3.3, "B": 3.0, "B-": 2.7,
-        "C+": 2.3, "C": 2.0, "C-": 1.7,
-        "D+": 1.3, "D": 1.0, "F": 0.0
-      };
-      setGradeSettings(defaultGrades);
-      localStorage.setItem('gradeSettings', JSON.stringify(defaultGrades));
-    }
-    
-    const savedNotifications = localStorage.getItem('notificationSettings');
-    if (savedNotifications) {
-      setNotifications(JSON.parse(savedNotifications));
-    }
-  }, []);
+    loadSettings();
+  }, [toast]);
 
-  const saveProfile = () => {
-    localStorage.setItem('userProfile', JSON.stringify(profile));
-    localStorage.setItem('academicYears', profile.academicYears);
-    toast({
-      title: "Profile Saved",
-      description: "Your profile settings have been updated successfully."
-    });
+  const saveProfile = async () => {
+    try {
+      // Save profile to backend
+      await profileAPI.updateProfile({
+        name: profile.name,
+        academicLevel: profile.academicLevel,
+        academicYears: parseInt(profile.academicYears)
+      });
+      
+      // Also save to localStorage as backup
+      localStorage.setItem('userProfile', JSON.stringify(profile));
+      localStorage.setItem('academicYears', profile.academicYears);
+      
+      toast({
+        title: "Profile Saved",
+        description: "Your profile settings have been updated successfully."
+      });
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+      
+      // Fallback to localStorage
+      localStorage.setItem('userProfile', JSON.stringify(profile));
+      localStorage.setItem('academicYears', profile.academicYears);
+      
+      toast({
+        title: "Profile Saved (Offline)",
+        description: "Your profile settings have been updated locally."
+      });
+    }
   };
 
-  const saveGradeSettings = () => {
-    localStorage.setItem('gradeSettings', JSON.stringify(gradeSettings));
-    // Trigger storage event to update GPA calculator
-    window.dispatchEvent(new Event('storage'));
-    toast({
-      title: "Grade Settings Saved",
-      description: "Your custom grade scale has been updated."
-    });
+  const saveGradeSettings = async () => {
+    try {
+      // Save grade settings to backend
+      await gradeSettingsAPI.updateGradeSettings(gradeSettings);
+      
+      // Refresh grade settings from API to ensure consistency
+      const updatedGradeSettings = await gradeSettingsAPI.getGradeSettings();
+      setGradeSettings(updatedGradeSettings);
+      
+      // Also save to localStorage as backup
+      localStorage.setItem('gradeSettings', JSON.stringify(updatedGradeSettings));
+      // Trigger storage event to update GPA calculator
+      window.dispatchEvent(new Event('storage'));
+      
+      toast({
+        title: "Grade Settings Saved",
+        description: "Your custom grade scale has been updated successfully."
+      });
+    } catch (error) {
+      console.error('Failed to save grade settings:', error);
+      
+      // Fallback to localStorage
+      localStorage.setItem('gradeSettings', JSON.stringify(gradeSettings));
+      window.dispatchEvent(new Event('storage'));
+      
+      toast({
+        title: "Grade Settings Saved (Offline)",
+        description: "Your custom grade scale has been updated locally."
+      });
+    }
   };
 
-  const addCustomGrade = () => {
+  const addCustomGrade = async () => {
     if (!newGrade.name || !newGrade.points) {
       toast({
         title: "Missing Information",
@@ -111,11 +211,31 @@ const Settings = () => {
       return;
     }
 
-    setGradeSettings(prev => ({
-      ...prev,
-      [newGrade.name]: points
-    }));
-    setNewGrade({ name: "", points: "" });
+    try {
+      // Add grade setting to API
+      await gradeSettingsAPI.addGradeSetting({
+        grade: newGrade.name,
+        points: points
+      });
+      
+      // Refresh grade settings from API
+      const updatedGradeSettings = await gradeSettingsAPI.getGradeSettings();
+      setGradeSettings(updatedGradeSettings);
+      
+      setNewGrade({ name: "", points: "" });
+      
+      toast({
+        title: "Grade Added",
+        description: `${newGrade.name} grade has been added successfully.`
+      });
+    } catch (error) {
+      console.error('Failed to add grade setting:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add grade setting. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const editGrade = (gradeName: string, points: number) => {
@@ -123,7 +243,7 @@ const Settings = () => {
     setNewGrade({ name: gradeName, points: points.toString() });
   };
 
-  const updateGrade = () => {
+  const updateGrade = async () => {
     if (!editingGrade || !newGrade.name || !newGrade.points) return;
     
     const points = parseFloat(newGrade.points);
@@ -136,21 +256,41 @@ const Settings = () => {
       return;
     }
 
-    setGradeSettings(prev => {
-      const updated = { ...prev };
+    try {
+      // If grade name changed, delete old grade and add new one
       if (editingGrade.name !== newGrade.name) {
-        delete updated[editingGrade.name];
+        await gradeSettingsAPI.deleteGradeSetting(editingGrade.name);
+        await gradeSettingsAPI.addGradeSetting({
+          grade: newGrade.name,
+          points: points
+        });
+      } else {
+        // Update existing grade
+        await gradeSettingsAPI.updateGradeSetting({
+          grade: newGrade.name,
+          points: points
+        });
       }
-      updated[newGrade.name] = points;
-      return updated;
-    });
-    
-    setEditingGrade(null);
-    setNewGrade({ name: "", points: "" });
-    toast({
-      title: "Grade Updated",
-      description: "Grade has been updated successfully"
-    });
+      
+      // Refresh grade settings from API
+      const updatedGradeSettings = await gradeSettingsAPI.getGradeSettings();
+      setGradeSettings(updatedGradeSettings);
+      
+      setEditingGrade(null);
+      setNewGrade({ name: "", points: "" });
+      
+      toast({
+        title: "Grade Updated",
+        description: "Grade has been updated successfully"
+      });
+    } catch (error) {
+      console.error('Failed to update grade setting:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update grade setting. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const cancelEdit = () => {
@@ -158,21 +298,61 @@ const Settings = () => {
     setNewGrade({ name: "", points: "" });
   };
 
-  const removeGrade = (gradeName: string) => {
-    setGradeSettings(prev => {
-      const updated = { ...prev };
-      delete updated[gradeName];
-      return updated;
-    });
+  const removeGrade = async (gradeName: string) => {
+    try {
+      // Delete grade setting from API
+      await gradeSettingsAPI.deleteGradeSetting(gradeName);
+      
+      // Refresh grade settings from API
+      const updatedGradeSettings = await gradeSettingsAPI.getGradeSettings();
+      setGradeSettings(updatedGradeSettings);
+      
+      toast({
+        title: "Grade Removed",
+        description: `${gradeName} grade has been removed successfully.`
+      });
+    } catch (error) {
+      console.error('Failed to remove grade setting:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove grade setting. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const saveNotifications = () => {
-    localStorage.setItem('notificationSettings', JSON.stringify(notifications));
-    localStorage.setItem('notificationTimings', JSON.stringify(notificationTimings));
-    toast({
-      title: "Notification Settings Saved",
-      description: "Your notification preferences have been updated."
-    });
+  const saveNotifications = async () => {
+    try {
+      // Save notification settings to backend
+      await notificationSettingsAPI.updateNotificationSettings({
+        assignments: notifications.assignments,
+        deadlines: notifications.deadlines,
+        gpaUpdates: notifications.gpaUpdates,
+        weeklyReports: notifications.weeklyReports,
+        assignmentFrequency: notificationTimings.assignmentFrequency,
+        deadlineTimings: JSON.stringify(notificationTimings.deadlineTimings)
+      });
+      
+      // Also save to localStorage as backup
+      localStorage.setItem('notificationSettings', JSON.stringify(notifications));
+      localStorage.setItem('notificationTimings', JSON.stringify(notificationTimings));
+      
+      toast({
+        title: "Notification Settings Saved",
+        description: "Your notification preferences have been updated."
+      });
+    } catch (error) {
+      console.error('Failed to save notification settings:', error);
+      
+      // Fallback to localStorage
+      localStorage.setItem('notificationSettings', JSON.stringify(notifications));
+      localStorage.setItem('notificationTimings', JSON.stringify(notificationTimings));
+      
+      toast({
+        title: "Notification Settings Saved (Offline)",
+        description: "Your notification preferences have been updated locally."
+      });
+    }
   };
 
   const changePassword = () => {
@@ -235,14 +415,23 @@ const Settings = () => {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-background via-primary-light/10 to-accent-light/20 p-6">
         <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Settings</h1>
-            <p className="text-muted-foreground">
-              Manage your profile, preferences, and account settings
-            </p>
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading your settings...</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-8">
+                <h1 className="text-3xl font-bold mb-2">Settings</h1>
+                <p className="text-muted-foreground">
+                  Manage your profile, preferences, and account settings
+                </p>
+              </div>
 
-          <Tabs defaultValue="profile" className="space-y-6">
+              <Tabs defaultValue="profile" className="space-y-6">
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="profile" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
@@ -610,6 +799,8 @@ const Settings = () => {
               </Card>
             </TabsContent>
           </Tabs>
+            </>
+          )}
         </div>
       </div>
     </Layout>

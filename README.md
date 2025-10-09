@@ -1,73 +1,145 @@
-# Welcome to your Lovable project
+# Royal Planner
+# Elsie Loise Amegavi - 11348827
 
-## Project info
+A comprehensive academic planning and management application designed to help students track their academic progress, manage their schedules, and achieve their educational goals.
 
-**URL**: https://lovable.dev/projects/05821217-db66-40d1-a14c-f18f905090ba
+## Project Overview
 
-## How can I edit this code?
+Royal Planner is a modern web application built for students who want to take control of their academic journey. The application provides powerful tools for GPA calculation, semester planning, journaling, and academic analytics.
 
-There are several ways of editing your application.
+## Features
 
-**Use Lovable**
+- **GPA Calculator**: Track semester and cumulative GPA with detailed course management
+- **Academic Planner**: Organize classes, assignments, and study sessions
+- **Reflection Journal**: Document your academic journey and personal growth
+- **Target Grade Estimator**: Set and track progress toward academic goals
+- **Grade Analytics**: Visualize academic performance with charts and insights
+- **Workload Balancer**: Manage study time and assignment deadlines
+- **Notifications**: Stay on top of important academic deadlines
+- **User Profile**: Manage personal information and academic settings
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/05821217-db66-40d1-a14c-f18f905090ba) and start prompting.
+## Technologies Used
 
-Changes made via Lovable will be committed automatically to this repo.
+This project is built with modern web technologies:
 
-**Use your preferred IDE**
+- **Frontend Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS
+- **UI Components**: shadcn/ui
+- **Charts**: Recharts
+- **Date Handling**: date-fns
+- **PDF Generation**: jsPDF
+- **CSV Processing**: PapaParse
+- **Routing**: React Router DOM
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+##  Getting Started
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Prerequisites
 
-Follow these steps:
+- Node.js (version 16 or higher)
+- npm or yarn package manager
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Installation
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd royal-planner-zen
+```
 
-# Step 3: Install the necessary dependencies.
-npm i
+2. Install frontend dependencies:
+```bash
+npm install
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+3. Install backend dependencies:
+```bash
+npm run backend:install
+```
+
+### Running the Application
+
+#### Option 1: Run Both Frontend and Backend Together
+```bash
+npm run start:full
+```
+
+#### Option 2: Run Separately
+1. Start the backend server:
+```bash
+npm run backend
+```
+
+2. In a new terminal, start the frontend:
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+3. Open your browser and navigate to `http://localhost:5173`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Backend API
 
-**Use GitHub Codespaces**
+The backend server runs on `http://localhost:3001` and provides RESTful APIs for:
+- User authentication and management
+- Academic data (semesters, courses, GPA)
+- Planner events and calendar
+- Journal entries and mood tracking
+- Target grades and analytics
+- Notifications and settings
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Default Login Credentials
 
-## What technologies are used for this project?
+- **Email**: `student@royal.edu` | **Password**: `password123`
+- **Email**: `demo@test.com` | **Password**: `demo123`
 
-This project is built with:
+##  Responsive Design
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+The application is fully responsive and optimized for:
+- Mobile devices (320px and up)
+- Tablets (768px and up)
+- Desktop computers (1024px and up)
 
-## How can I deploy this project?
+##  Design System
 
-Simply open [Lovable](https://lovable.dev/projects/05821217-db66-40d1-a14c-f18f905090ba) and click on Share -> Publish.
+Royal Planner Zen features a cohesive design system with:
+- **Primary Color**: Royal Purple (#8B5CF6)
+- **Accent Color**: Gold (#FCD34D)
+- **Typography**: Clean, readable fonts optimized for academic content
+- **Components**: Consistent UI patterns throughout the application
 
-## Can I connect a custom domain to my Lovable project?
+##  Academic Use
 
-Yes, you can!
+This application is designed for:
+- University students
+- College students
+- High school students
+- Anyone pursuing academic goals
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+##  Development
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+### Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+
+### Project Structure
+
+```
+src/
+├── components/          # Reusable UI components
+├── pages/              # Application pages/routes
+├── hooks/              # Custom React hooks
+├── lib/                # Utility functions
+└── assets/             # Static assets
+```
+
+##  License
+
+This project is created for academic purposes as part of a Human Computer Interaction course.
+
+## Author
+
+Elsie Loise Amegavi - 11348827
+Developed as a semester project for DCIT 302 - Human Computer Interaction.

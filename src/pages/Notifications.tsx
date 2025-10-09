@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Bell, BellOff, Check, X, Calendar, BookOpen, Target, Clock, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { notificationsAPI } from "@/services/api";
 
 interface Notification {
   id: string;
@@ -19,73 +20,83 @@ interface Notification {
 
 const Notifications = () => {
   const { toast } = useToast();
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      type: 'deadline',
-      title: 'Assignment Due Soon',
-      message: 'Mathematics 301 - Calculus III Assignment is due in 2 hours',
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      read: false,
-      urgent: true
-    },
-    {
-      id: '2',
-      type: 'gpa',
-      title: 'GPA Updated',
-      message: 'Your cumulative GPA has been updated to 3.67 after your recent Chemistry grade',
-      timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
-      read: false
-    },
-    {
-      id: '3',
-      type: 'assignment',
-      title: 'New Assignment Posted',
-      message: 'Physics 201 - Lab Report 3 has been posted. Due date: Next Friday',
-      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000),
-      read: true
-    },
-    {
-      id: '4',
-      type: 'reminder',
-      title: 'Study Session Reminder',
-      message: 'Your scheduled study session for Organic Chemistry starts in 30 minutes',
-      timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000),
-      read: false
-    },
-    {
-      id: '5',
-      type: 'deadline',
-      title: 'Registration Deadline',
-      message: 'Course registration for next semester closes in 3 days',
-      timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000),
-      read: true
-    },
-    {
-      id: '6',
-      type: 'system',
-      title: 'Target Grade Alert',
-      message: 'You need to maintain B+ average in remaining courses to achieve your target 3.5 GPA',
-      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      read: false
-    },
-    {
-      id: '7',
-      type: 'assignment',
-      title: 'Grade Posted',
-      message: 'Your grade for English 102 Essay has been posted: A- (3.7)',
-      timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      read: true
-    },
-    {
-      id: '8',
-      type: 'reminder',
-      title: 'Weekly Report Ready',
-      message: 'Your weekly academic progress report is ready to view',
-      timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-      read: true
-    }
-  ]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Load notifications from backend
+        const backendNotifications = await notificationsAPI.getNotifications();
+        
+        // Convert backend notifications to Notification format
+        const formattedNotifications: Notification[] = backendNotifications.map((notification: any) => ({
+          id: notification.id.toString(),
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          timestamp: new Date(notification.created_at),
+          read: notification.read,
+          urgent: notification.urgent
+        }));
+        
+        setNotifications(formattedNotifications);
+      } catch (error) {
+        console.error('Failed to load notifications from backend:', error);
+        
+        // Fallback to localStorage or default notifications
+        const savedNotifications = localStorage.getItem('notifications');
+        if (savedNotifications) {
+          const parsed = JSON.parse(savedNotifications).map((n: any) => ({
+            ...n,
+            timestamp: new Date(n.timestamp)
+          }));
+          setNotifications(parsed);
+        } else {
+          // Use default notifications as last resort
+          setNotifications([
+            {
+              id: '1',
+              type: 'deadline',
+              title: 'Assignment Due Soon',
+              message: 'Mathematics 301 - Calculus III Assignment is due in 2 hours',
+              timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
+              read: false,
+              urgent: true
+            },
+            {
+              id: '2',
+              type: 'gpa',
+              title: 'GPA Updated',
+              message: 'Your cumulative GPA has been updated to 3.67 after your recent Chemistry grade',
+              timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
+              read: false
+            },
+            {
+              id: '3',
+              type: 'assignment',
+              title: 'New Assignment Posted',
+              message: 'Physics 201 - Lab Report 3 has been posted. Due date: Next Friday',
+              timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000),
+              read: true
+            }
+          ]);
+        }
+        
+        toast({
+          title: "Offline Mode",
+          description: "Using cached notifications. Some features may be limited.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadNotifications();
+  }, [toast]);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -134,22 +145,66 @@ const Notifications = () => {
     }
   };
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
-      )
-    );
+  const markAsRead = async (id: string) => {
+    try {
+      // Mark as read in backend
+      await notificationsAPI.markAsRead(parseInt(id));
+
+      // Update local state
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === id ? { ...notif, read: true } : notif
+        )
+      );
+      
+      toast({
+        title: "Notification Marked as Read",
+        description: "Notification has been marked as read"
+      });
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+      
+      // Fallback to local state update
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === id ? { ...notif, read: true } : notif
+        )
+      );
+      
+      toast({
+        title: "Notification Marked as Read (Offline)",
+        description: "Notification has been marked as read locally"
+      });
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notif => ({ ...notif, read: true }))
-    );
-    toast({
-      title: "All notifications marked as read",
-      description: "Your notification list has been updated."
-    });
+  const markAllAsRead = async () => {
+    try {
+      // Mark all as read in backend
+      await notificationsAPI.markAllAsRead();
+
+      // Update local state
+      setNotifications(prev => 
+        prev.map(notif => ({ ...notif, read: true }))
+      );
+      
+      toast({
+        title: "All notifications marked as read",
+        description: "Your notification list has been updated."
+      });
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+      
+      // Fallback to local state update
+      setNotifications(prev => 
+        prev.map(notif => ({ ...notif, read: true }))
+      );
+      
+      toast({
+        title: "All notifications marked as read (Offline)",
+        description: "Your notification list has been updated locally."
+      });
+    }
   };
 
   const deleteNotification = (id: string) => {
@@ -177,33 +232,42 @@ const Notifications = () => {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-background via-primary-light/10 to-accent-light/20 p-6">
         <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-                  <Bell className="h-8 w-8 text-primary" />
-                  Notifications
-                </h1>
-                <p className="text-muted-foreground">
-                  Stay updated with your academic progress and important deadlines
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {unreadCount > 0 && (
-                  <Badge variant="secondary" className="bg-primary/10 text-primary">
-                    {unreadCount} unread
-                  </Badge>
-                )}
-                {urgentCount > 0 && (
-                  <Badge variant="destructive">
-                    {urgentCount} urgent
-                  </Badge>
-                )}
+          {isLoading ? (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading your notifications...</p>
               </div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="mb-8">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+                      <Bell className="h-8 w-8 text-primary" />
+                      Notifications
+                    </h1>
+                    <p className="text-muted-foreground">
+                      Stay updated with your academic progress and important deadlines
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {unreadCount > 0 && (
+                      <Badge variant="secondary" className="bg-primary/10 text-primary">
+                        {unreadCount} unread
+                      </Badge>
+                    )}
+                    {urgentCount > 0 && (
+                      <Badge variant="destructive">
+                        {urgentCount} urgent
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-          <div className="flex gap-4 mb-6">
+              <div className="flex gap-4 mb-6">
             <Button onClick={markAllAsRead} variant="outline" className="flex items-center gap-2">
               <Check className="h-4 w-4" />
               Mark All Read
@@ -295,6 +359,8 @@ const Notifications = () => {
               </ScrollArea>
             </CardContent>
           </Card>
+            </>
+          )}
         </div>
       </div>
     </Layout>

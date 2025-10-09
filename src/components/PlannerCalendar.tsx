@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit, Trash2, Clock, BookOpen, AlertTriangle, FileText, Calendar as CalendarIcon } from "lucide-react";
 import { format, isSameDay, addDays, startOfWeek, isAfter, isBefore, addWeeks } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { eventsAPI } from "@/services/api";
 import { TimetableDialog } from "./TimetableDialog";
 import { BulkTimetableUpload } from "./BulkTimetableUpload";
 import { WorkloadBalancer } from "./WorkloadBalancer";
@@ -86,9 +87,10 @@ const initialEvents: PlannerEvent[] = [
 
 export const PlannerCalendar = () => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [events, setEvents] = useState<PlannerEvent[]>(initialEvents);
+  const [events, setEvents] = useState<PlannerEvent[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<PlannerEvent | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -98,6 +100,55 @@ export const PlannerCalendar = () => {
     reminders: [] as string[]
   });
   const { toast } = useToast();
+
+  // Load events from backend on component mount
+  useEffect(() => {
+    const loadEvents = async () => {
+      try {
+        setIsLoading(true);
+        const backendEvents = await eventsAPI.getEvents();
+        
+        // Convert backend events to PlannerEvent format
+        const formattedEvents: PlannerEvent[] = backendEvents.map((event: any) => ({
+          id: event.id.toString(),
+          title: event.title,
+          description: event.description || "",
+          date: new Date(event.date),
+          type: event.type,
+          time: event.time,
+          priority: event.priority,
+          reminders: event.reminders ? JSON.parse(event.reminders) : []
+        }));
+        
+        setEvents(formattedEvents);
+      } catch (error) {
+        console.error('Failed to load events from backend:', error);
+        
+        // Fallback to localStorage
+        const savedEvents = localStorage.getItem('plannerEvents');
+        if (savedEvents) {
+          const parsedEvents = JSON.parse(savedEvents).map((event: any) => ({
+            ...event,
+            date: new Date(event.date)
+          }));
+          setEvents(parsedEvents);
+        } else {
+          // Use initial dummy data as last resort
+          setEvents(initialEvents);
+        }
+        
+        toast({
+          title: "Offline Mode",
+          description: "Using cached events. Some features may be limited.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadEvents();
+  }, [toast]);
 
   const generateRecurringEvents = (baseEvent: PlannerEvent) => {
     if (!baseEvent.isRecurring || !baseEvent.recurringDays) return [];
@@ -186,7 +237,7 @@ export const PlannerCalendar = () => {
 
   const selectedDayEvents = selectedDate ? getDayEvents(selectedDate) : [];
 
-  const handleAddEvent = () => {
+  const handleAddEvent = async () => {
     if (!selectedDate || !formData.title.trim()) {
       toast({
         title: "Error",
@@ -196,23 +247,62 @@ export const PlannerCalendar = () => {
       return;
     }
 
-    const newEvent: PlannerEvent = {
-      id: Date.now().toString(),
-      title: formData.title,
-      description: formData.description,
-      date: selectedDate,
-      type: formData.type,
-      time: formData.time || undefined,
-      priority: formData.priority,
-      reminders: formData.reminders
-    };
+    try {
+      const newEvent: PlannerEvent = {
+        id: Date.now().toString(),
+        title: formData.title,
+        description: formData.description,
+        date: selectedDate,
+        type: formData.type,
+        time: formData.time || undefined,
+        priority: formData.priority,
+        reminders: formData.reminders
+      };
 
-    setEvents([...events, newEvent]);
-    resetForm();
-    toast({
-      title: "Event Added",
-      description: `${formData.title} has been added to your calendar`
-    });
+      // Add event to backend
+      await eventsAPI.createEvent({
+        title: newEvent.title,
+        description: newEvent.description,
+        date: newEvent.date.toISOString().split('T')[0],
+        type: newEvent.type,
+        time: newEvent.time,
+        priority: newEvent.priority,
+        reminders: (newEvent.reminders as string[]) || []
+      });
+
+      // Update local state
+      setEvents([...events, newEvent]);
+      resetForm();
+      
+      toast({
+        title: "Event Added",
+        description: `${formData.title} has been added to your calendar`
+      });
+    } catch (error) {
+      console.error('Failed to add event:', error);
+      
+      // Fallback to localStorage
+      const newEvent: PlannerEvent = {
+        id: Date.now().toString(),
+        title: formData.title,
+        description: formData.description,
+        date: selectedDate,
+        type: formData.type,
+        time: formData.time || undefined,
+        priority: formData.priority,
+        reminders: formData.reminders
+      };
+
+      const updatedEvents = [...events, newEvent];
+      setEvents(updatedEvents);
+      localStorage.setItem('plannerEvents', JSON.stringify(updatedEvents));
+      resetForm();
+      
+      toast({
+        title: "Event Added (Offline)",
+        description: `${formData.title} has been added to your calendar`
+      });
+    }
   };
 
   const handleEditEvent = (event: PlannerEvent) => {
@@ -253,12 +343,31 @@ export const PlannerCalendar = () => {
     });
   };
 
-  const handleDeleteEvent = (eventId: string) => {
-    setEvents(events.filter(event => event.id !== eventId));
-    toast({
-      title: "Event Deleted",
-      description: "Event has been removed from your calendar"
-    });
+  const handleDeleteEvent = async (eventId: string) => {
+    try {
+      // Delete event from backend
+      await eventsAPI.deleteEvent(parseInt(eventId));
+
+      // Update local state
+      setEvents(events.filter(event => event.id !== eventId));
+      
+      toast({
+        title: "Event Deleted",
+        description: "Event has been removed from your calendar"
+      });
+    } catch (error) {
+      console.error('Failed to delete event:', error);
+      
+      // Fallback to localStorage
+      const updatedEvents = events.filter(event => event.id !== eventId);
+      setEvents(updatedEvents);
+      localStorage.setItem('plannerEvents', JSON.stringify(updatedEvents));
+      
+      toast({
+        title: "Event Deleted (Offline)",
+        description: "Event has been removed from your calendar"
+      });
+    }
   };
 
   const resetForm = () => {
@@ -275,9 +384,18 @@ export const PlannerCalendar = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Action Buttons */}
-      <div className="flex gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      {isLoading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading your calendar events...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
         <TimetableDialog onAddTimetable={handleAddTimetable} />
         <BulkTimetableUpload onUpload={handleBulkUpload} />
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -287,13 +405,13 @@ export const PlannerCalendar = () => {
                 resetForm();
                 setIsDialogOpen(true);
               }}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 w-full sm:w-auto"
             >
               <Plus className="h-4 w-4" />
               Add Event
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="mx-4 sm:mx-0">
             <DialogHeader>
               <DialogTitle>
                 {editingEvent ? "Edit Event" : "Add New Event"}
@@ -387,11 +505,11 @@ export const PlannerCalendar = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={resetForm}>
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
+                <Button variant="outline" onClick={resetForm} className="w-full sm:w-auto">
                   Cancel
                 </Button>
-                <Button onClick={editingEvent ? handleUpdateEvent : handleAddEvent}>
+                <Button onClick={editingEvent ? handleUpdateEvent : handleAddEvent} className="w-full sm:w-auto">
                   {editingEvent ? "Update" : "Add"} Event
                 </Button>
               </div>
@@ -400,7 +518,7 @@ export const PlannerCalendar = () => {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Calendar with embedded events - Reduced size */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -538,6 +656,8 @@ export const PlannerCalendar = () => {
           <WorkloadBalancer />
         </CardContent>
       </Card>
+      </>
+    )}
     </div>
   );
 };

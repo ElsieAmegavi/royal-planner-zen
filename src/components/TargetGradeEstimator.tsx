@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Target, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { targetGradesAPI, analyticsAPI } from "@/services/api";
 
 interface TargetData {
   targetGPA: number;
@@ -21,48 +22,128 @@ export const TargetGradeEstimator = () => {
   const [targetSemester, setTargetSemester] = useState("");
   const [savedTarget, setSavedTarget] = useState<TargetData | null>(null);
   const [estimatedCreditsPerSemester, setEstimatedCreditsPerSemester] = useState("15");
+  const [isLoading, setIsLoading] = useState(true);
+  const [academicData, setAcademicData] = useState({
+    currentCredits: 0,
+    currentGPA: 0,
+    currentSemesterNumber: 1,
+    totalSemesters: 8
+  });
+  const [calculation, setCalculation] = useState<any>(null);
+  const [semesterOptions, setSemesterOptions] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
-    const saved = localStorage.getItem('targetGrade');
-    if (saved) {
-      setSavedTarget(JSON.parse(saved));
-    }
-  }, []);
+    const loadTargetData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Load academic data
+        const academic = await getCurrentAcademicData();
+        setAcademicData(academic);
+        
+        // Load target grade from backend
+        const backendTarget = await targetGradesAPI.getTargetGrade();
+        if (backendTarget) {
+          setSavedTarget(backendTarget);
+          setTargetGPA(backendTarget.targetGpa.toString());
+          setTargetSemester(backendTarget.targetSemester);
+        }
+        
+        // Generate semester options
+        const options = generateSemesterOptionsFromData(academic);
+        setSemesterOptions(options);
+        
+        // Calculate required grades if target exists
+        if (backendTarget) {
+          const calc = calculateRequiredGradesFromData(backendTarget, academic);
+          setCalculation(calc);
+        }
+        
+      } catch (error) {
+        console.error('Failed to load target grade from backend:', error);
+        
+        // Fallback to localStorage
+        const saved = localStorage.getItem('targetGrade');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setSavedTarget(parsed);
+          setTargetGPA(parsed.targetGPA.toString());
+          setTargetSemester(parsed.targetSemester);
+        }
+        
+        // Load academic data from localStorage
+        const academic = await getCurrentAcademicData();
+        setAcademicData(academic);
+        
+        const options = generateSemesterOptionsFromData(academic);
+        setSemesterOptions(options);
+        
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const calc = calculateRequiredGradesFromData(parsed, academic);
+          setCalculation(calc);
+        }
+        
+        toast({
+          title: "Offline Mode",
+          description: "Using cached data. Some features may be limited.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadTargetData();
+  }, [toast]);
 
-  const getCurrentAcademicData = () => {
-    const semesterData = localStorage.getItem('semesterData');
-    const academicYears = localStorage.getItem('academicYears') || '4';
-    
-    let currentCredits = 0;
-    let currentGPA = 0;
-    let currentSemesterNumber = 1;
-    
-    if (semesterData) {
-      const semesters = JSON.parse(semesterData);
-      const allCourses = semesters.flatMap((s: any) => s.courses);
+  const getCurrentAcademicData = async () => {
+    try {
+      // Get cumulative GPA from backend
+      const analytics = await analyticsAPI.getCumulativeGpa();
+      return {
+        currentCredits: analytics.totalCredits,
+        currentGPA: analytics.cumulativeGpa,
+        currentSemesterNumber: 1, // This would need to be calculated based on semesters
+        totalSemesters: 8 // Default 4 years * 2 semesters
+      };
+    } catch (error) {
+      console.error('Failed to get academic data from backend:', error);
       
-      if (allCourses.length > 0) {
-        const totalPoints = allCourses.reduce((sum: number, course: any) => sum + (course.points * course.credits), 0);
-        currentCredits = allCourses.reduce((sum: number, course: any) => sum + course.credits, 0);
-        currentGPA = currentCredits > 0 ? totalPoints / currentCredits : 0;
+      // Fallback to localStorage
+      const semesterData = localStorage.getItem('semesterData');
+      const academicYears = localStorage.getItem('academicYears') || '4';
+      
+      let currentCredits = 0;
+      let currentGPA = 0;
+      let currentSemesterNumber = 1;
+      
+      if (semesterData) {
+        const semesters = JSON.parse(semesterData);
+        const allCourses = semesters.flatMap((s: any) => s.courses);
+        
+        if (allCourses.length > 0) {
+          const totalPoints = allCourses.reduce((sum: number, course: any) => sum + (course.points * course.credits), 0);
+          currentCredits = allCourses.reduce((sum: number, course: any) => sum + course.credits, 0);
+          currentGPA = currentCredits > 0 ? totalPoints / currentCredits : 0;
+        }
+        
+        // Find current semester
+        const activeSemesters = semesters.filter((s: any) => s.courses.length > 0);
+        if (activeSemesters.length > 0) {
+          const lastSemester = activeSemesters[activeSemesters.length - 1];
+          currentSemesterNumber = (lastSemester.year - 1) * 2 + lastSemester.semester;
+        }
       }
       
-      // Find current semester
-      const activeSemesters = semesters.filter((s: any) => s.courses.length > 0);
-      if (activeSemesters.length > 0) {
-        const lastSemester = activeSemesters[activeSemesters.length - 1];
-        currentSemesterNumber = (lastSemester.year - 1) * 2 + lastSemester.semester;
-      }
+      const totalSemesters = parseInt(academicYears) * 2;
+      
+      return { currentCredits, currentGPA, currentSemesterNumber, totalSemesters };
     }
-    
-    const totalSemesters = parseInt(academicYears) * 2;
-    
-    return { currentCredits, currentGPA, currentSemesterNumber, totalSemesters };
   };
-
-  const generateSemesterOptions = () => {
-    const { currentSemesterNumber, totalSemesters } = getCurrentAcademicData();
+  const generateSemesterOptionsFromData = (data: any) => {
+    const { currentSemesterNumber, totalSemesters } = data;
     const options = [];
     
     for (let i = currentSemesterNumber + 1; i <= totalSemesters; i++) {
@@ -77,11 +158,11 @@ export const TargetGradeEstimator = () => {
     return options;
   };
 
-  const calculateRequiredGrades = () => {
-    if (!savedTarget) return null;
+  const calculateRequiredGradesFromData = (target: any, data: any) => {
+    if (!target) return null;
     
-    const { currentCredits, currentGPA, currentSemesterNumber } = getCurrentAcademicData();
-    const targetSemesterParts = savedTarget.targetSemester.split('-');
+    const { currentCredits, currentGPA, currentSemesterNumber } = data;
+    const targetSemesterParts = target.targetSemester.split('-');
     const targetSemesterNumber = (parseInt(targetSemesterParts[0]) - 1) * 2 + parseInt(targetSemesterParts[1]);
     
     const remainingSemesters = targetSemesterNumber - currentSemesterNumber;
@@ -92,7 +173,7 @@ export const TargetGradeEstimator = () => {
     const totalFutureCredits = currentCredits + futureCredits;
     
     const currentTotalPoints = currentGPA * currentCredits;
-    const requiredTotalPoints = savedTarget.targetGPA * totalFutureCredits;
+    const requiredTotalPoints = target.targetGPA * totalFutureCredits;
     const requiredFuturePoints = requiredTotalPoints - currentTotalPoints;
     
     const requiredAverageGPA = futureCredits > 0 ? requiredFuturePoints / futureCredits : 0;
@@ -108,7 +189,7 @@ export const TargetGradeEstimator = () => {
     };
   };
 
-  const saveTarget = () => {
+  const saveTarget = async () => {
     if (!targetGPA || !targetSemester) {
       toast({
         title: "Missing Information",
@@ -128,45 +209,105 @@ export const TargetGradeEstimator = () => {
       return;
     }
 
-    const { currentCredits, currentGPA } = getCurrentAcademicData();
-    
-    const targetData: TargetData = {
-      targetGPA: gpa,
-      targetSemester,
-      currentCredits,
-      currentGPA
-    };
+    try {
+      const academicData = await getCurrentAcademicData();
+      
+      const targetData: TargetData = {
+        targetGPA: gpa,
+        targetSemester,
+        currentCredits: academicData.currentCredits,
+        currentGPA: academicData.currentGPA
+      };
 
-    localStorage.setItem('targetGrade', JSON.stringify(targetData));
-    setSavedTarget(targetData);
-    
-    toast({
-      title: "Target Saved",
-      description: `Target GPA of ${gpa.toFixed(2)} set for ${targetSemester.replace('-', ' Semester ')}`
-    });
+      // Save to backend
+      await targetGradesAPI.setTargetGrade({
+        targetGpa: gpa,
+        targetSemester,
+        currentCredits: academicData.currentCredits,
+        currentGpa: academicData.currentGPA
+      });
+
+      setSavedTarget(targetData);
+      
+      // Update calculation and semester options
+      const options = generateSemesterOptionsFromData(academicData);
+      setSemesterOptions(options);
+      const calc = calculateRequiredGradesFromData(targetData, academicData);
+      setCalculation(calc);
+      
+      toast({
+        title: "Target Saved",
+        description: `Target GPA of ${gpa.toFixed(2)} set for ${targetSemester.replace('-', ' Semester ')}`
+      });
+    } catch (error) {
+      console.error('Failed to save target grade:', error);
+      
+      // Fallback to localStorage
+      const academicData = await getCurrentAcademicData();
+      
+      const targetData: TargetData = {
+        targetGPA: gpa,
+        targetSemester,
+        currentCredits: academicData.currentCredits,
+        currentGPA: academicData.currentGPA
+      };
+
+      localStorage.setItem('targetGrade', JSON.stringify(targetData));
+      setSavedTarget(targetData);
+      
+      toast({
+        title: "Target Saved (Offline)",
+        description: `Target GPA of ${gpa.toFixed(2)} set for ${targetSemester.replace('-', ' Semester ')}`
+      });
+    }
   };
 
-  const clearTarget = () => {
-    localStorage.removeItem('targetGrade');
-    setSavedTarget(null);
-    setTargetGPA("");
-    setTargetSemester("");
-    
-    toast({
-      title: "Target Cleared",
-      description: "Your target grade has been removed"
-    });
+  const clearTarget = async () => {
+    try {
+      // Clear from localStorage (backend API doesn't exist yet)
+      localStorage.removeItem('targetGrade');
+      
+      setSavedTarget(null);
+      setTargetGPA("");
+      setTargetSemester("");
+      setCalculation(null);
+      
+      toast({
+        title: "Target Cleared",
+        description: "Target grade has been cleared successfully"
+      });
+    } catch (error) {
+      console.error('Failed to clear target grade:', error);
+      
+      // Fallback to localStorage
+      localStorage.removeItem('targetGrade');
+      setSavedTarget(null);
+      setTargetGPA("");
+      setTargetSemester("");
+      setCalculation(null);
+      
+      toast({
+        title: "Target Cleared (Offline)",
+        description: "Your target grade has been removed"
+      });
+    }
   };
 
-  const { currentCredits, currentGPA } = getCurrentAcademicData();
-  const calculation = calculateRequiredGrades();
-  const semesterOptions = generateSemesterOptions();
-  const progressPercentage = savedTarget ? Math.min((currentGPA / savedTarget.targetGPA) * 100, 100) : 0;
+  const progressPercentage = savedTarget ? Math.min((academicData.currentGPA / savedTarget.targetGPA) * 100, 100) : 0;
 
   return (
     <div className="space-y-6">
-      {/* Set Target Form */}
-      <Card>
+      {isLoading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading your target data...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Set Target Form */}
+          <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5" />
@@ -244,7 +385,7 @@ export const TargetGradeEstimator = () => {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center">
-                <div className="text-2xl font-bold">{currentGPA.toFixed(2)}</div>
+                <div className="text-2xl font-bold">{academicData.currentGPA.toFixed(2)}</div>
                 <div className="text-sm opacity-90">Current GPA</div>
               </div>
               <div className="text-center">
@@ -252,7 +393,7 @@ export const TargetGradeEstimator = () => {
                 <div className="text-sm opacity-90">Target GPA</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">{currentCredits}</div>
+                <div className="text-2xl font-bold">{academicData.currentCredits}</div>
                 <div className="text-sm opacity-90">Credits Completed</div>
               </div>
             </div>
@@ -366,6 +507,8 @@ export const TargetGradeEstimator = () => {
           </CardContent>
         </Card>
       )}
+        </>
+      )}
     </div>
   );
-};
+};  

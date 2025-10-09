@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { authAPI } from "@/services/api";
 
 interface LoginFormProps {
   onSwitchToRegister: () => void;
@@ -20,40 +21,26 @@ export const LoginForm = ({ onSwitchToRegister, onSwitchToForgotPassword, onLogi
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // Dummy user data
-  const dummyUsers = [
-    { email: "student@royal.edu", password: "password123", name: "Alex Johnson" },
-    { email: "demo@test.com", password: "demo123", name: "Demo User" }
-  ];
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const user = dummyUsers.find(u => u.email === email && u.password === password);
-      
-      if (user) {
-        localStorage.setItem('userSession', JSON.stringify({ 
-          email: user.email, 
-          name: user.name,
-          isLoggedIn: true 
-        }));
-        toast({
-          title: "Welcome back!",
-          description: `Logged in successfully as ${user.name}`
-        });
-        onLoginSuccess();
-      } else {
-        toast({
-          title: "Login Failed",
-          description: "Invalid email or password. Try student@royal.edu / password123",
-          variant: "destructive"
-        });
-      }
+    try {
+      const response = await authAPI.login({ email, password });
+      toast({
+        title: "Welcome back!",
+        description: `Logged in successfully as ${response.user.name}`
+      });
+      onLoginSuccess();
+    } catch (error) {
+      toast({
+        title: "Login Failed",
+        description: error instanceof Error ? error.message : "Invalid email or password. Try student@royal.edu / password123",
+        variant: "destructive"
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (

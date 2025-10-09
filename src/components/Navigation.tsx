@@ -17,7 +17,7 @@ import { ProfileMenu } from "@/components/ProfileMenu";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { name: "Dashboard", path: "/", icon: Crown },
+  { name: "Dashboard", path: "/dashboard", icon: Crown },
   { name: "GPA Calculator", path: "/gpa", icon: Calculator },
   { name: "Target Grades", path: "/target", icon: Target },
   { name: "Planner", path: "/planner", icon: Calendar },

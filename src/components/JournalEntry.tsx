@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { journalAPI } from "@/services/api";
 
 export interface JournalEntry {
   id: string;
@@ -85,7 +86,7 @@ export const JournalEntryCard = ({ entry, onEdit, onDelete }: JournalEntryCardPr
         <p className="text-muted-foreground mb-3 line-clamp-3">{entry.content}</p>
         
         <div className="flex flex-wrap gap-1">
-          {entry.tags.map((tag, index) => (
+          {entry.tags?.length > 0 && entry.tags.map((tag, index) => (
             <Badge key={index} variant="secondary" className="text-xs">
               #{tag}
             </Badge>
@@ -103,7 +104,7 @@ interface JournalFormDialogProps {
   onSave: (entry: Omit<JournalEntry, 'id'> | JournalEntry) => void;
 }
 
-export const JournalFormDialog = ({ entry, isOpen, onClose, onSave }: JournalFormDialogProps) => {
+export const JournalFormDialog = ({ entry, isOpen, onClose }: JournalFormDialogProps) => {
   const [formData, setFormData] = useState({
     title: entry?.title || "",
     content: entry?.content || "",
@@ -112,7 +113,7 @@ export const JournalFormDialog = ({ entry, isOpen, onClose, onSave }: JournalFor
   });
   const { toast } = useToast();
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.title.trim() || !formData.content.trim()) {
       toast({
         title: "Error",
@@ -122,16 +123,29 @@ export const JournalFormDialog = ({ entry, isOpen, onClose, onSave }: JournalFor
       return;
     }
 
-    const entryData = {
-      ...formData,
-      tags: formData.tags.split(",").map(tag => tag.trim()).filter(tag => tag.length > 0),
-      date: entry?.date || new Date(),
-    };
+   
+    try {
+      const tags = formData.tags.split(",").map(tag => tag.trim()).filter(tag => tag.length > 0);
+      const response = await journalAPI.createEntry({ title: formData.title, content: formData.content, mood: formData.mood, tags: tags, date: entry?.date.toISOString() || new Date().toISOString() });
+      console.log(response);
+      // reload the entries component
+      window.location.reload();
 
-    if (entry) {
-      onSave({ ...entryData, id: entry.id });
-    } else {
-      onSave(entryData);
+      toast({
+        title: "Journal Entry Created!",
+        description: `Journal Entry Created successfully!`,
+        variant: "default"
+      });
+      onClose();
+
+    } catch (error) {
+      toast({
+        title: "Journal Entry Creation Failed",
+        description: error instanceof Error ? error.message : "Failed to create journal entry. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      // setIsLoading(false);
     }
     
     onClose();
@@ -153,7 +167,7 @@ export const JournalFormDialog = ({ entry, isOpen, onClose, onSave }: JournalFor
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl mx-4 sm:mx-0">
         <DialogHeader>
           <DialogTitle>
             {entry ? "Edit Entry" : "New Journal Entry"}
@@ -206,11 +220,11 @@ export const JournalFormDialog = ({ entry, isOpen, onClose, onSave }: JournalFor
               placeholder="physics, study-group, breakthrough (comma separated)"
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={handleClose}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2">
+            <Button variant="outline" onClick={handleClose} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button onClick={handleSubmit}>
+            <Button onClick={handleSubmit} className="w-full sm:w-auto">
               {entry ? "Update" : "Save"} Entry
             </Button>
           </div>

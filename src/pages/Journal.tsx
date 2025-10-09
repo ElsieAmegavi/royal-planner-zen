@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { JournalEntryCard, JournalFormDialog, JournalEntry } from "@/components/JournalEntry";
 import { Plus, BookOpen } from "lucide-react";
+import { journalAPI } from "@/services/api";
 
 // Sample journal entries
 const initialEntries: JournalEntry[] = [
@@ -27,23 +28,87 @@ const initialEntries: JournalEntry[] = [
 ];
 
 const Journal = () => {
-  const [entries, setEntries] = useState<JournalEntry[]>(initialEntries);
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
 
-  const handleSaveEntry = (entryData: Omit<JournalEntry, 'id'> | JournalEntry) => {
-    if ('id' in entryData) {
-      // Editing existing entry
-      setEntries(entries.map(entry => 
-        entry.id === entryData.id ? entryData : entry
-      ));
-    } else {
-      // Creating new entry
-      const newEntry: JournalEntry = {
-        ...entryData,
-        id: Date.now().toString()
-      };
-      setEntries([newEntry, ...entries]);
+  useEffect(() => {
+    const fetchEntries = async () => {
+      setIsLoading(true);
+      try {
+        const response = await journalAPI.getEntries();
+        setEntries(response);
+      } catch (error) {
+        console.error('Failed to load journal entries from backend:', error);
+        
+        // Fallback to localStorage
+        const savedEntries = localStorage.getItem('journalEntries');
+        if (savedEntries) {
+          const parsed = JSON.parse(savedEntries).map((entry: any) => ({
+            ...entry,
+            date: new Date(entry.date)
+          }));
+          setEntries(parsed);
+        } else {
+          setEntries(initialEntries);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchEntries();
+  }, []);
+
+  const handleSaveEntry = async (entryData: Omit<JournalEntry, 'id'> | JournalEntry) => {
+    try {
+      if ('id' in entryData) {
+        // Editing existing entry
+        await journalAPI.updateEntry(parseInt(entryData.id), {
+          title: entryData.title,
+          content: entryData.content,
+          mood: entryData.mood,
+          tags: entryData.tags,
+          date: entryData.date.toISOString()
+        });
+        setEntries(entries.map(entry => 
+          entry.id === entryData.id ? entryData : entry
+        ));
+      } else {
+        // Creating new entry
+        const response = await journalAPI.createEntry({
+          title: entryData.title,
+          content: entryData.content,
+          mood: entryData.mood,
+          tags: entryData.tags,
+          date: entryData.date.toISOString()
+        });
+        
+        const newEntry: JournalEntry = {
+          ...entryData,
+          id: response.id.toString()
+        };
+        setEntries([newEntry, ...entries]);
+      }
+    } catch (error) {
+      console.error('Failed to save journal entry:', error);
+      
+      // Fallback to localStorage
+      if ('id' in entryData) {
+        setEntries(entries.map(entry => 
+          entry.id === entryData.id ? entryData : entry
+        ));
+      } else {
+        const newEntry: JournalEntry = {
+          ...entryData,
+          id: Date.now().toString()
+        };
+        setEntries([newEntry, ...entries]);
+      }
+      
+      // Save to localStorage as backup
+      localStorage.setItem('journalEntries', JSON.stringify(entries));
     }
   };
 
@@ -52,8 +117,17 @@ const Journal = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDeleteEntry = (id: string) => {
-    setEntries(entries.filter(entry => entry.id !== id));
+  const handleDeleteEntry = async (id: string) => {
+    try {
+      await journalAPI.deleteEntry(parseInt(id));
+      setEntries(entries.filter(entry => entry.id !== id));
+    } catch (error) {
+      console.error('Failed to delete journal entry:', error);
+      
+      // Fallback to localStorage
+      setEntries(entries.filter(entry => entry.id !== id));
+      localStorage.setItem('journalEntries', JSON.stringify(entries.filter(entry => entry.id !== id)));
+    }
   };
 
   const handleCloseDialog = () => {
@@ -69,7 +143,8 @@ const Journal = () => {
 
   const totalEntries = entries.length;
   const thisMonthEntries = entries.filter(entry => {
-    const entryMonth = entry.date.getMonth();
+    console.log(entry.date);
+    const entryMonth = new Date(entry.date).getMonth();
     const currentMonth = new Date().getMonth();
     return entryMonth === currentMonth;
   }).length;
@@ -80,20 +155,20 @@ const Journal = () => {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-background via-primary-light/10 to-accent-light/20">
         {/* Header Section */}
-        <div className="bg-purple-600 text-white p-6 mb-6">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="bg-purple-600 text-white p-4 sm:p-6 mb-4 sm:mb-6">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                <BookOpen className="h-8 w-8" />
-                <h1 className="text-3xl font-bold">Reflection Journal</h1>
+              <div className="flex items-center gap-2 sm:gap-3 mb-2">
+                <BookOpen className="h-6 w-6 sm:h-8 sm:w-8" />
+                <h1 className="text-2xl sm:text-3xl font-bold">Reflection Journal</h1>
               </div>
-              <p className="text-purple-100">
+              <p className="text-purple-100 text-sm sm:text-base">
                 Track your academic journey, moods, and personal growth
               </p>
             </div>
             <Button 
               onClick={() => setIsDialogOpen(true)} 
-              className="bg-white text-purple-600 hover:bg-purple-50"
+              className="bg-white text-purple-600 hover:bg-purple-50 w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-2" />
               New Entry
@@ -101,8 +176,8 @@ const Journal = () => {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
             {/* Main Content - Journal Entries */}
             <div className="lg:col-span-3">
               <div className="mb-6">
