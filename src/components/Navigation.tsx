@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { 
   Calculator, 
@@ -9,11 +9,14 @@ import {
   Menu, 
   X,
   Crown,
-  Bell
+  Bell,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileMenu } from "@/components/ProfileMenu";
+import { connectionAPI } from "@/services/api";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -28,10 +31,29 @@ const navItems = [
 
 export const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
   const location = useLocation();
 
   // Mock notification count
   const notificationCount = 3;
+
+  // Check connection status
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        const connected = await connectionAPI.testConnection();
+        setIsOnline(connected);
+      } catch (error) {
+        setIsOnline(false);
+      }
+    };
+
+    // Check connection on mount and periodically
+    checkConnection();
+    const interval = setInterval(checkConnection, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <>
@@ -47,8 +69,23 @@ export const Navigation = () => {
           {isOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </Button>
         
-        {/* Profile Menu */}
-        <div className="ml-auto">
+        {/* Connection Status and Profile Menu */}
+        <div className="ml-auto flex items-center gap-3">
+          {/* Connection Status Indicator */}
+          <div className="flex items-center gap-2">
+            {isOnline ? (
+              <div className="flex items-center gap-1 text-green-600">
+                <Wifi className="h-4 w-4" />
+                <span className="text-xs font-medium hidden sm:inline">Online</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-red-600">
+                <WifiOff className="h-4 w-4" />
+                <span className="text-xs font-medium hidden sm:inline">Offline</span>
+              </div>
+            )}
+          </div>
+          
           <ProfileMenu />
         </div>
       </header>

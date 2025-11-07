@@ -19,9 +19,7 @@ const daysOfWeek = [
   { value: 0, label: "Sunday" }
 ];
 
-interface TimetableDialogProps {
-  onAddTimetable: (timetable: PlannerEvent) => void;
-}
+import { TimetableDialogProps, PlannerEvent } from "@/types";
 
 export const TimetableDialog = ({ onAddTimetable }: TimetableDialogProps) => {
   const [isOpen, setIsOpen] = useState(false);

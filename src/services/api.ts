@@ -1,4 +1,5 @@
-const API_BASE_URL = 'http://localhost:3001/api';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
 // Helper function to get auth token
 const getAuthToken = () => {
@@ -27,12 +28,26 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   try {
     const response = await fetch(url, config);
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'API request failed');
+    // Check if response has content before trying to parse JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('Invalid response format');
     }
     
-    return await response.json();
+    const text = await response.text();
+    if (text.trim() === '') {
+      throw new Error('Empty response received');
+    }
+    
+    const data = JSON.parse(text);
+    
+    // Handle standardized API response format
+    if (data.error) {
+      throw new Error(data.message || 'API request failed');
+    }
+    
+    // Return the data portion of the response
+    return data.data;
   } catch (error) {
     console.error('API request error:', error);
     throw error;
@@ -98,6 +113,11 @@ export const profileAPI = {
     method: 'PUT',
     body: JSON.stringify(profileData),
   }),
+  changePassword: (passwordData: { currentPassword: string; newPassword: string }) => 
+    apiRequest('/profile/password', {
+      method: 'PUT',
+      body: JSON.stringify(passwordData),
+    }),
 };
 
 // Semesters and Courses API
@@ -108,6 +128,9 @@ export const semestersAPI = {
       method: 'POST',
       body: JSON.stringify(semesterData),
     }),
+  cleanupDuplicates: () => apiRequest('/semesters/cleanup', {
+    method: 'DELETE',
+  }),
   getCourses: (semesterId: number) => apiRequest(`/semesters/${semesterId}/courses`),
   addCourse: (semesterId: number, courseData: {
     name: string;
@@ -211,6 +234,9 @@ export const targetGradesAPI = {
     method: 'POST',
     body: JSON.stringify(targetData),
   }),
+  deleteTargetGrade: () => apiRequest('/target-grades', {
+    method: 'DELETE',
+  }),
 };
 
 // Notifications API
@@ -246,4 +272,22 @@ export const notificationSettingsAPI = {
 export const analyticsAPI = {
   getGpaHistory: () => apiRequest('/analytics/gpa-history'),
   getCumulativeGpa: () => apiRequest('/analytics/cumulative-gpa'),
+  getGpaTrend: () => apiRequest('/analytics/gpa-trend'),
+  getCourseAnalysis: () => apiRequest('/analytics/course-analysis'),
+  getGradeDistribution: () => apiRequest('/analytics/grade-distribution'),
+  getDeadlineClustering: () => apiRequest('/analytics/deadline-clustering'),
+  getWorkloadDistribution: () => apiRequest('/analytics/workload-distribution'),
+};
+
+// Connection Test API
+export const connectionAPI = {
+  testConnection: async () => {
+    try {
+      await profileAPI.getProfile();
+      return true;
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      return false;
+    }
+  },
 };

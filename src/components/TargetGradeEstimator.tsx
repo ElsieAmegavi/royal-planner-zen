@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,13 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Target, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { targetGradesAPI, analyticsAPI } from "@/services/api";
-
-interface TargetData {
-  targetGPA: number;
-  targetSemester: string;
-  currentCredits: number;
-  currentGPA: number;
-}
+import { TargetData } from "@/types";
 
 export const TargetGradeEstimator = () => {
   const [targetGPA, setTargetGPA] = useState("");
@@ -46,8 +41,8 @@ export const TargetGradeEstimator = () => {
         const backendTarget = await targetGradesAPI.getTargetGrade();
         if (backendTarget) {
           setSavedTarget(backendTarget);
-          setTargetGPA(backendTarget.targetGpa.toString());
-          setTargetSemester(backendTarget.targetSemester);
+          setTargetGPA(backendTarget?.targetGpa?.toString());
+          setTargetSemester(backendTarget?.targetSemester);
         }
         
         // Generate semester options
@@ -67,9 +62,16 @@ export const TargetGradeEstimator = () => {
         const saved = localStorage.getItem('targetGrade');
         if (saved) {
           const parsed = JSON.parse(saved);
-          setSavedTarget(parsed);
-          setTargetGPA(parsed.targetGPA.toString());
-          setTargetSemester(parsed.targetSemester);
+          // Handle both old and new field name formats for backward compatibility
+          const targetData: TargetData = {
+            targetGpa: parsed.targetGpa || parsed.targetGPA,
+            targetSemester: parsed.targetSemester,
+            currentCredits: parsed.currentCredits,
+            currentGpa: parsed.currentGpa || parsed.currentGPA
+          };
+          setSavedTarget(targetData);
+          setTargetGPA(targetData.targetGpa.toString());
+          setTargetSemester(targetData.targetSemester);
         }
         
         // Load academic data from localStorage
@@ -81,7 +83,14 @@ export const TargetGradeEstimator = () => {
         
         if (saved) {
           const parsed = JSON.parse(saved);
-          const calc = calculateRequiredGradesFromData(parsed, academic);
+          // Handle both old and new field name formats for backward compatibility
+          const targetData: TargetData = {
+            targetGpa: parsed.targetGpa || parsed.targetGPA,
+            targetSemester: parsed.targetSemester,
+            currentCredits: parsed.currentCredits,
+            currentGpa: parsed.currentGpa || parsed.currentGPA
+          };
+          const calc = calculateRequiredGradesFromData(targetData, academic);
           setCalculation(calc);
         }
         
@@ -162,8 +171,8 @@ export const TargetGradeEstimator = () => {
     if (!target) return null;
     
     const { currentCredits, currentGPA, currentSemesterNumber } = data;
-    const targetSemesterParts = target.targetSemester.split('-');
-    const targetSemesterNumber = (parseInt(targetSemesterParts[0]) - 1) * 2 + parseInt(targetSemesterParts[1]);
+    const targetSemesterParts = target?.targetSemester?.split('-');
+    const targetSemesterNumber = (parseInt(targetSemesterParts?.[0] || '0') - 1) * 2 + parseInt(targetSemesterParts?.[1] || '0');
     
     const remainingSemesters = targetSemesterNumber - currentSemesterNumber;
     if (remainingSemesters <= 0) return null;
@@ -173,7 +182,7 @@ export const TargetGradeEstimator = () => {
     const totalFutureCredits = currentCredits + futureCredits;
     
     const currentTotalPoints = currentGPA * currentCredits;
-    const requiredTotalPoints = target.targetGPA * totalFutureCredits;
+    const requiredTotalPoints = target.targetGpa * totalFutureCredits;
     const requiredFuturePoints = requiredTotalPoints - currentTotalPoints;
     
     const requiredAverageGPA = futureCredits > 0 ? requiredFuturePoints / futureCredits : 0;
@@ -213,10 +222,10 @@ export const TargetGradeEstimator = () => {
       const academicData = await getCurrentAcademicData();
       
       const targetData: TargetData = {
-        targetGPA: gpa,
+        targetGpa: gpa,
         targetSemester,
         currentCredits: academicData.currentCredits,
-        currentGPA: academicData.currentGPA
+        currentGpa: academicData.currentGPA
       };
 
       // Save to backend
@@ -246,10 +255,10 @@ export const TargetGradeEstimator = () => {
       const academicData = await getCurrentAcademicData();
       
       const targetData: TargetData = {
-        targetGPA: gpa,
+        targetGpa: gpa,
         targetSemester,
         currentCredits: academicData.currentCredits,
-        currentGPA: academicData.currentGPA
+        currentGpa: academicData.currentGPA
       };
 
       localStorage.setItem('targetGrade', JSON.stringify(targetData));
@@ -264,8 +273,8 @@ export const TargetGradeEstimator = () => {
 
   const clearTarget = async () => {
     try {
-      // Clear from localStorage (backend API doesn't exist yet)
-      localStorage.removeItem('targetGrade');
+      // Clear from backend
+      await targetGradesAPI.deleteTargetGrade();
       
       setSavedTarget(null);
       setTargetGPA("");
@@ -293,7 +302,7 @@ export const TargetGradeEstimator = () => {
     }
   };
 
-  const progressPercentage = savedTarget ? Math.min((academicData.currentGPA / savedTarget.targetGPA) * 100, 100) : 0;
+  const progressPercentage = savedTarget ? Math.min((academicData.currentGPA / savedTarget.targetGpa) * 100, 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -385,15 +394,15 @@ export const TargetGradeEstimator = () => {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center">
-                <div className="text-2xl font-bold">{academicData.currentGPA.toFixed(2)}</div>
+                <div className="text-2xl font-bold">{academicData?.currentGPA?.toFixed(2)}</div>
                 <div className="text-sm opacity-90">Current GPA</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">{savedTarget.targetGPA.toFixed(2)}</div>
+                <div className="text-2xl font-bold">{savedTarget?.targetGpa?.toFixed(2)}</div>
                 <div className="text-sm opacity-90">Target GPA</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">{academicData.currentCredits}</div>
+                <div className="text-2xl font-bold">{academicData?.currentCredits}</div>
                 <div className="text-sm opacity-90">Credits Completed</div>
               </div>
             </div>
@@ -401,7 +410,7 @@ export const TargetGradeEstimator = () => {
             <div className="mt-6">
               <div className="flex justify-between text-sm mb-2">
                 <span>Progress to Target</span>
-                <span>{progressPercentage.toFixed(0)}%</span>
+                <span>{progressPercentage?.toFixed(0)}%</span>
               </div>
               <Progress 
                 value={progressPercentage} 
@@ -461,13 +470,13 @@ export const TargetGradeEstimator = () => {
                 <div className="text-green-800">
                   <h4 className="font-semibold mb-2">🎯 Great! Your target is achievable!</h4>
                   <p>
-                    You need to maintain an average GPA of <strong>{calculation.requiredAverageGPA.toFixed(2)}</strong> 
-                    across your remaining {calculation.remainingSemesters} semesters to reach your target of {savedTarget.targetGPA.toFixed(2)}.
+                    You need to maintain an average GPA of <strong>{calculation?.requiredAverageGPA?.toFixed(2)} </strong> 
+                     across your remaining {calculation?.remainingSemesters} semesters to reach your target of {savedTarget?.targetGpa?.toFixed(2)}.
                   </p>
                   <div className="mt-3 space-y-1">
                     <p className="text-sm">💡 <strong>Tips for success:</strong></p>
                     <ul className="text-sm list-disc list-inside ml-4 space-y-1">
-                      <li>Aim for grades that give you {calculation.requiredAverageGPA.toFixed(1)}+ points per credit</li>
+                      <li>Aim for grades that give you {calculation?.requiredAverageGPA?.toFixed(1)}+ points per credit</li>
                       <li>Focus on higher-credit courses for maximum impact</li>
                       <li>Consider retaking courses if your institution allows GPA replacement</li>
                     </ul>
@@ -477,7 +486,7 @@ export const TargetGradeEstimator = () => {
                 <div className="text-red-800">
                   <h4 className="font-semibold mb-2">⚠️ This target may be challenging</h4>
                   <p>
-                    To reach your target GPA of {savedTarget.targetGPA.toFixed(2)}, you would need to maintain an average GPA of {calculation.requiredAverageGPA.toFixed(2)} 
+                    To reach your target GPA of {savedTarget?.targetGpa?.toFixed(2)}, you would need to maintain an average GPA of {calculation?.requiredAverageGPA?.toFixed(2)} 
                     across your remaining semesters, which exceeds the maximum possible GPA of 4.0.
                   </p>
                   <div className="mt-3 space-y-1">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,21 +11,7 @@ import { Plus, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { journalAPI } from "@/services/api";
-
-export interface JournalEntry {
-  id: string;
-  title: string;
-  content: string;
-  mood: "motivated" | "stressed" | "happy" | "anxious" | "confident" | "overwhelmed" | "focused" | "tired";
-  tags: string[];
-  date: Date;
-}
-
-interface JournalEntryCardProps {
-  entry: JournalEntry;
-  onEdit: (entry: JournalEntry) => void;
-  onDelete: (id: string) => void;
-}
+import { JournalEntry, JournalEntryCardProps, JournalFormDialogProps } from "@/types";
 
 const moodColors = {
   motivated: "bg-green-100 text-green-800 border-green-200",
@@ -97,20 +83,33 @@ export const JournalEntryCard = ({ entry, onEdit, onDelete }: JournalEntryCardPr
   );
 };
 
-interface JournalFormDialogProps {
-  entry?: JournalEntry | null;
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (entry: Omit<JournalEntry, 'id'> | JournalEntry) => void;
-}
 
-export const JournalFormDialog = ({ entry, isOpen, onClose }: JournalFormDialogProps) => {
+export const JournalFormDialog = ({ entry, isOpen, onClose, onSave }: JournalFormDialogProps) => {
   const [formData, setFormData] = useState({
-    title: entry?.title || "",
-    content: entry?.content || "",
-    mood: entry?.mood || "motivated" as JournalEntry["mood"],
-    tags: entry?.tags.join(", ") || "",
+    title: "",
+    content: "",
+    mood: "motivated" as JournalEntry["mood"],
+    tags: "",
   });
+
+  // Update form data when entry changes
+  useEffect(() => {
+    if (entry) {
+      setFormData({
+        title: entry.title,
+        content: entry.content,
+        mood: entry.mood,
+        tags: entry.tags.join(", "),
+      });
+    } else {
+      setFormData({
+        title: "",
+        content: "",
+        mood: "motivated",
+        tags: "",
+      });
+    }
+  }, [entry]);
   const { toast } = useToast();
 
   const handleSubmit = async () => {
@@ -123,32 +122,35 @@ export const JournalFormDialog = ({ entry, isOpen, onClose }: JournalFormDialogP
       return;
     }
 
-   
     try {
       const tags = formData.tags.split(",").map(tag => tag.trim()).filter(tag => tag.length > 0);
-      const response = await journalAPI.createEntry({ title: formData.title, content: formData.content, mood: formData.mood, tags: tags, date: entry?.date.toISOString() || new Date().toISOString() });
-      console.log(response);
-      // reload the entries component
-      window.location.reload();
+      
+      const entryData = {
+        title: formData.title,
+        content: formData.content,
+        mood: formData.mood,
+        tags: tags,
+        date: entry?.date || new Date(),
+        ...(entry && { id: entry.id }) // Include ID if editing
+      };
+
+      await onSave(entryData);
 
       toast({
-        title: "Journal Entry Created!",
-        description: `Journal Entry Created successfully!`,
+        title: entry ? "Journal Entry Updated!" : "Journal Entry Created!",
+        description: entry ? "Your journal entry has been updated successfully!" : "Your journal entry has been created successfully!",
         variant: "default"
       });
+      
+      resetForm();
       onClose();
-
     } catch (error) {
       toast({
-        title: "Journal Entry Creation Failed",
-        description: error instanceof Error ? error.message : "Failed to create journal entry. Please try again.",
+        title: entry ? "Journal Entry Update Failed" : "Journal Entry Creation Failed",
+        description: error instanceof Error ? error.message : `Failed to ${entry ? 'update' : 'create'} journal entry. Please try again.`,
         variant: "destructive"
       });
-    } finally {
-      // setIsLoading(false);
     }
-    
-    onClose();
   };
 
   const resetForm = () => {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,9 +16,11 @@ import {
 import heroImage from "@/assets/hero-image.jpg";
 import { GradeAnalytics } from "./GradeAnalytics";
 import { analyticsAPI, targetGradesAPI, eventsAPI } from "@/services/api";
+import { DashboardData } from "@/types";
+
 
 export const Dashboard = () => {
-  const [dashboardData, setDashboardData] = useState({
+  const [dashboardData, setDashboardData] = useState<DashboardData>({
     currentGpa: 0,
     targetGpa: 0,
     totalCredits: 0,
@@ -37,14 +40,14 @@ export const Dashboard = () => {
           const target = await targetGradesAPI.getTargetGrade();
           targetGpa = target?.targetGpa || 0;
         } catch (error) {
-          console.log('No target grade set');
+          // No target grade set
         }
         
         // Load upcoming events (next 7 days)
         const events = await eventsAPI.getEvents();
         const today = new Date();
         const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-        const upcomingEvents = events.filter((event: any) => {
+        const upcomingEvents = (events || []).filter((event: any) => {
           const eventDate = new Date(event.date);
           return eventDate >= today && eventDate <= nextWeek;
         }).length;
@@ -258,29 +261,57 @@ export const Dashboard = () => {
               Progress Toward Goals
             </CardTitle>
             <CardDescription>
-              You're making great progress! Keep up the excellent work.
+              {dashboardData.targetGpa > 0 ? 
+                `You're ${dashboardData.currentGpa >= dashboardData.targetGpa ? 'exceeding' : 'working toward'} your target!` :
+                'Set your target GPA to track your progress.'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span>Target GPA: 3.70</span>
-                <span>Current: 3.45</span>
+            {dashboardData.targetGpa > 0 ? (
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span>Target GPA: {dashboardData.targetGpa.toFixed(2)}</span>
+                  <span>Current: {dashboardData.currentGpa.toFixed(2)}</span>
+                </div>
+                <Progress 
+                  value={Math.min((dashboardData.currentGpa / dashboardData.targetGpa) * 100, 100)} 
+                  className="h-2" 
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {dashboardData.currentGpa >= dashboardData.targetGpa ? 
+                    `🎉 Congratulations! You've achieved your target GPA!` :
+                    `You need ${(dashboardData.targetGpa - dashboardData.currentGpa).toFixed(2)} more points to reach your target`
+                  }
+                </p>
               </div>
-              <Progress value={75} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-1">
-                You need an average of 3.85 in remaining courses
-              </p>
-            </div>
+            ) : (
+              <div className="text-center py-8">
+                <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground mb-4">No target GPA set</p>
+                <Link to="/target">
+                  <Button>
+                    <Target className="h-4 w-4 mr-2" />
+                    Set Your Target GPA
+                  </Button>
+                </Link>
+              </div>
+            )}
             
             <div>
               <div className="flex justify-between text-sm mb-2">
-                <span>Study Goal: 25 hours/week</span>
-                <span>This week: 18 hours</span>
+                <span>Total Credits: {dashboardData.totalCredits}</span>
+                <span>Courses Completed: {dashboardData.totalCredits > 0 ? Math.floor(dashboardData.totalCredits / 3) : 0}</span>
               </div>
-              <Progress value={72} className="h-2" />
+              <Progress 
+                value={dashboardData.totalCredits > 0 ? Math.min((dashboardData.totalCredits / 120) * 100, 100) : 0} 
+                className="h-2" 
+              />
               <p className="text-xs text-muted-foreground mt-1">
-                7 more hours to reach your weekly goal
+                {dashboardData.totalCredits > 0 ? 
+                  `${120 - dashboardData.totalCredits} credits remaining for graduation (assuming 120 total)` :
+                  'Add courses to track your progress toward graduation'
+                }
               </p>
             </div>
           </CardContent>
@@ -303,15 +334,13 @@ export const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground italic mb-4">
-              "Had a great study session today. Finally understanding calculus concepts that were confusing me before. 
-              Feeling more confident about the upcoming midterm..."
-            </p>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">3 days ago</span>
+            <div className="text-center py-8">
+              <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <p className="text-muted-foreground mb-4">No journal entries yet</p>
               <Link to="/journal">
-                <Button variant="outline" size="sm">
-                  Read More
+                <Button>
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Start Your First Entry
                 </Button>
               </Link>
             </div>

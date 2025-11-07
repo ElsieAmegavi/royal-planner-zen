@@ -1,29 +1,123 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, ResponsiveContainer } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Calendar, Clock, TrendingUp } from "lucide-react";
-import { format, addDays, startOfWeek } from "date-fns";
+import { format, addDays, startOfWeek, isAfter, isBefore } from "date-fns";
+import { eventsAPI, analyticsAPI } from "@/services/api";
+import { PlannerEvent, DeadlineClusteringData } from "@/types";
 
-// Sample workload data for the next 8 weeks
-const workloadData = [
-  { week: "Jan 27", assignments: 3, exams: 0, projects: 1, totalHours: 12, difficulty: "medium" },
-  { week: "Feb 3", assignments: 5, exams: 1, projects: 0, totalHours: 18, difficulty: "high" },
-  { week: "Feb 10", assignments: 2, exams: 0, projects: 2, totalHours: 15, difficulty: "high" },
-  { week: "Feb 17", assignments: 4, exams: 2, projects: 0, totalHours: 22, difficulty: "critical" },
-  { week: "Feb 24", assignments: 1, exams: 0, projects: 1, totalHours: 8, difficulty: "low" },
-  { week: "Mar 3", assignments: 3, exams: 1, projects: 1, totalHours: 16, difficulty: "medium" },
-  { week: "Mar 10", assignments: 6, exams: 0, projects: 2, totalHours: 20, difficulty: "high" },
-  { week: "Mar 17", assignments: 2, exams: 1, projects: 0, totalHours: 10, difficulty: "medium" }
-];
+// Helper function to calculate workload from events
+const calculateWorkloadFromEvents = (events: PlannerEvent[]) => {
+  const today = new Date();
+  const weeksData = [];
+  
+  // Process events for workload analysis
+  
+  // Find the date range of all events
+  const eventDates = events.map(event => new Date(event.date));
+  const minDate = eventDates.length > 0 ? new Date(Math.min(...eventDates.map(d => d.getTime()))) : today;
+  const maxDate = eventDates.length > 0 ? new Date(Math.max(...eventDates.map(d => d.getTime()))) : addDays(today, 56);
+  
+  // Start from the earliest event date or today, whichever is earlier
+  const startDate = minDate < today ? minDate : today;
+  const endDate = maxDate > addDays(today, 56) ? maxDate : addDays(today, 56);
+  
+  // Calculate number of weeks to cover
+  const totalWeeks = Math.ceil((endDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  const weeksToShow = Math.min(Math.max(totalWeeks, 8), 16); // Show at least 8 weeks, max 16
+  
+  // Generate weeks data
+  for (let i = 0; i < weeksToShow; i++) {
+    const weekStart = addDays(startOfWeek(startDate), i * 7);
+    const weekEnd = addDays(weekStart, 6);
+    const weekLabel = format(weekStart, "MMM d");
+    
+    // Filter events for this week
+    const weekEvents = events.filter(event => {
+      const eventDate = new Date(event.date);
+      return isAfter(eventDate, weekStart) && isBefore(eventDate, addDays(weekEnd, 1));
+    });
+    
+    // Count different types of events
+    const assignments = weekEvents.filter(e => e.type === 'assignment').length;
+    const exams = weekEvents.filter(e => e.type === 'exam' || e.type === 'quiz').length;
+    const projects = weekEvents.filter(e => e.type === 'deadline').length;
+    const classes = weekEvents.filter(e => e.type === 'class').length;
+    const study = weekEvents.filter(e => e.type === 'study').length;
+    const other = weekEvents.filter(e => !['assignment', 'exam', 'quiz', 'deadline', 'class', 'study'].includes(e.type)).length;
+    
+    // Calculate total hours (include all event types)
+    const totalHours = assignments * 3 + exams * 4 + projects * 6 + classes * 2 + study * 2 + other * 2;
+    
+    // Calculate workload intensity
+    
+    // Determine difficulty
+    let difficulty = "low";
+    if (totalHours > 20) difficulty = "critical";
+    else if (totalHours > 15) difficulty = "high";
+    else if (totalHours > 10) difficulty = "medium";
+    
+    weeksData.push({
+      week: weekLabel,
+      assignments,
+      exams,
+      projects,
+      classes,
+      study,
+      other,
+      totalEvents: weekEvents.length,
+      totalHours,
+      difficulty
+    });
+  }
+  
+  return weeksData;
+};
 
-const deadlineCluster = [
-  { date: "Feb 17", count: 6, type: "critical" },
-  { date: "Feb 18", count: 4, type: "high" },
-  { date: "Feb 19", count: 2, type: "medium" },
-  { date: "Mar 10", count: 5, type: "high" },
-  { date: "Mar 11", count: 3, type: "medium" }
-];
+// Helper function to analyze deadline clustering
+const analyzeDeadlineClustering = (events: PlannerEvent[]) => {
+  const today = new Date();
+  const nextMonth = addDays(today, 30);
+  
+  // Filter upcoming deadlines
+  const upcomingEvents = events.filter(event => {
+    const eventDate = new Date(event.date);
+    return isAfter(eventDate, today) && isBefore(eventDate, nextMonth) && 
+           (event.type === 'deadline' || event.type === 'assignment' || event.type === 'exam');
+  });
+  
+  // Group by date
+  const dateGroups = upcomingEvents.reduce((groups, event) => {
+    const dateKey = format(new Date(event.date), "MMM d");
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
+    }
+    groups[dateKey].push(event);
+    return groups;
+  }, {} as Record<string, PlannerEvent[]>);
+  
+  // Convert to clustering data
+  const clustering = Object.entries(dateGroups)
+    .map(([date, events]) => {
+      let type = "low";
+      if (events.length >= 4) type = "critical";
+      else if (events.length >= 3) type = "high";
+      else if (events.length >= 2) type = "medium";
+      
+      return {
+        date,
+        count: events.length,
+        type,
+        events: events.map(e => e.title)
+      };
+    })
+    .filter(cluster => cluster.count > 1) // Only show clusters
+    .sort((a, b) => b.count - a.count); // Sort by count descending
+  
+  return clustering;
+};
 
 const getDifficultyColor = (difficulty: string) => {
   switch (difficulty) {
@@ -48,15 +142,108 @@ const chartConfig = {
     label: "Projects",
     color: "hsl(var(--accent))"
   },
+  classes: {
+    label: "Classes",
+    color: "hsl(var(--secondary))"
+  },
+  study: {
+    label: "Study",
+    color: "hsl(var(--muted))"
+  },
+  other: {
+    label: "Other",
+    color: "hsl(var(--border))"
+  },
   totalHours: {
     label: "Total Hours",
-    color: "hsl(var(--secondary))"
+    color: "hsl(var(--foreground))"
   }
 };
 
 export const WorkloadBalancer = () => {
+  const [events, setEvents] = useState<PlannerEvent[]>([]);
+  const [deadlineClustering, setDeadlineClustering] = useState<DeadlineClusteringData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load events and deadline clustering data
+        const [eventsData, clusteringData] = await Promise.all([
+          eventsAPI.getEvents(),
+          analyticsAPI.getDeadlineClustering()
+        ]);
+        
+        setEvents(eventsData || []);
+        setDeadlineClustering(clusteringData);
+      } catch (error) {
+        console.error('Failed to load workload data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Calculate workload from real events
+  const workloadData = calculateWorkloadFromEvents(events);
+  const deadlineCluster = analyzeDeadlineClustering(events);
+  
   const criticalWeeks = workloadData.filter(week => week.difficulty === "critical");
-  const avgWorkload = workloadData.reduce((sum, week) => sum + week.totalHours, 0) / workloadData.length;
+  const avgWorkload = workloadData.length > 0 ? 
+    workloadData.reduce((sum, week) => sum + week.totalHours, 0) / workloadData.length : 0;
+  
+  // Find next deadline
+  const today = new Date();
+  const upcomingDeadlines = events
+    .filter(event => {
+      const eventDate = new Date(event.date);
+      return isAfter(eventDate, today) && 
+             (event.type === 'deadline' || event.type === 'assignment' || event.type === 'exam');
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  
+  const nextDeadline = upcomingDeadlines[0];
+  const daysToNextDeadline = nextDeadline ? 
+    Math.ceil((new Date(nextDeadline.date).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+  
+  // Find peak week
+  const peakWeek = workloadData.reduce((peak, week) => 
+    week.totalHours > peak.totalHours ? week : peak, workloadData[0] || { week: "N/A", totalHours: 0 });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <div className="h-4 bg-muted animate-pulse rounded" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 bg-muted animate-pulse rounded mb-1" />
+                <div className="h-3 bg-muted animate-pulse rounded w-2/3" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[1, 2].map((i) => (
+            <Card key={i}>
+              <CardHeader>
+                <div className="h-6 bg-muted animate-pulse rounded" />
+                <div className="h-4 bg-muted animate-pulse rounded w-3/4" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-64 bg-muted animate-pulse rounded" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -96,8 +283,12 @@ export const WorkloadBalancer = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground">days away</p>
+            <div className="text-2xl font-bold">
+              {nextDeadline ? daysToNextDeadline : "N/A"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {nextDeadline ? "days away" : "no deadlines"}
+            </p>
           </CardContent>
         </Card>
 
@@ -109,8 +300,8 @@ export const WorkloadBalancer = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Feb 17</div>
-            <p className="text-xs text-muted-foreground">22 hours</p>
+            <div className="text-2xl font-bold">{peakWeek.week}</div>
+            <p className="text-xs text-muted-foreground">{peakWeek.totalHours} hours</p>
           </CardContent>
         </Card>
       </div>
@@ -125,17 +316,30 @@ export const WorkloadBalancer = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig}>
-              <BarChart data={workloadData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="week" />
-                <YAxis />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="assignments" stackId="a" fill="var(--color-assignments)" />
-                <Bar dataKey="exams" stackId="a" fill="var(--color-exams)" />
-                <Bar dataKey="projects" stackId="a" fill="var(--color-projects)" />
-              </BarChart>
-            </ChartContainer>
+            {workloadData.length > 0 && workloadData.some(week => week.totalEvents > 0) ? (
+              <ChartContainer config={chartConfig}>
+                <BarChart data={workloadData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="week" />
+                  <YAxis />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="assignments" stackId="a" fill="var(--color-assignments)" />
+                  <Bar dataKey="exams" stackId="a" fill="var(--color-exams)" />
+                  <Bar dataKey="projects" stackId="a" fill="var(--color-projects)" />
+                  <Bar dataKey="classes" stackId="a" fill="var(--color-classes)" />
+                  <Bar dataKey="study" stackId="a" fill="var(--color-study)" />
+                  <Bar dataKey="other" stackId="a" fill="var(--color-other)" />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No workload data available</p>
+                  <p className="text-sm">Add events to see workload distribution</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -148,27 +352,41 @@ export const WorkloadBalancer = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig}>
-              <LineChart data={workloadData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="week" />
-                <YAxis />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Line 
-                  type="monotone" 
-                  dataKey="totalHours" 
-                  stroke="var(--color-totalHours)" 
-                  strokeWidth={3}
-                  dot={{ fill: "var(--color-totalHours)", strokeWidth: 2, r: 4 }}
-                />
-              </LineChart>
-            </ChartContainer>
-            <div className="mt-4 p-3 bg-muted rounded-lg">
-              <p className="text-sm font-medium">Study Recommendation</p>
-              <p className="text-xs text-muted-foreground">
-                Start preparing 2 weeks early for Feb 17 peak. Consider redistributing some work.
-              </p>
-            </div>
+            {workloadData.length > 0 && workloadData.some(week => week.totalHours > 0) ? (
+              <>
+                <ChartContainer config={chartConfig}>
+                  <LineChart data={workloadData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="week" />
+                    <YAxis />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="totalHours" 
+                      stroke="var(--color-totalHours)" 
+                      strokeWidth={3}
+                      dot={{ fill: "var(--color-totalHours)", strokeWidth: 2, r: 4 }}
+                    />
+                  </LineChart>
+                </ChartContainer>
+                {peakWeek.totalHours > 15 && (
+                  <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950 dark:border-amber-800">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Study Recommendation</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-300">
+                      Peak week ({peakWeek.week}) has {peakWeek.totalHours} hours. Consider starting early or redistributing workload.
+                    </p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No time investment data available</p>
+                  <p className="text-sm">Add events to see time trends</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -182,38 +400,53 @@ export const WorkloadBalancer = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {deadlineCluster.map((cluster, index) => (
-              <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    <span className="font-medium">{cluster.date}</span>
+          {deadlineCluster.length > 0 ? (
+            <>
+              <div className="space-y-3">
+                {deadlineCluster.map((cluster, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        <span className="font-medium">{cluster.date}</span>
+                      </div>
+                      <Badge 
+                        variant={cluster.type === "critical" ? "destructive" : cluster.type === "high" ? "secondary" : "outline"}
+                      >
+                        {cluster.count} deadlines
+                      </Badge>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {cluster.type} priority
+                    </Badge>
                   </div>
-                  <Badge 
-                    variant={cluster.type === "critical" ? "destructive" : cluster.type === "high" ? "secondary" : "outline"}
-                  >
-                    {cluster.count} deadlines
-                  </Badge>
+                ))}
+              </div>
+              
+              {deadlineCluster.some(cluster => cluster.type === "critical" || cluster.type === "high") && (
+                <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950 dark:border-amber-800">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-800 dark:text-amber-200">Workload Warning</p>
+                      <p className="text-sm text-amber-600 dark:text-amber-300 mt-1">
+                        {deadlineCluster.filter(c => c.type === "critical").length > 0 ? 
+                          `Critical deadline clustering detected. Consider starting assignments early or requesting deadline extensions where possible.` :
+                          `High concentration of deadlines detected. Plan your time carefully to avoid last-minute stress.`
+                        }
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <Badge variant="outline" className="text-xs">
-                  {cluster.type} priority
-                </Badge>
-              </div>
-            ))}
-          </div>
-          
-          <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950 dark:border-amber-800">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">Workload Warning</p>
-                <p className="text-sm text-amber-600 dark:text-amber-300 mt-1">
-                  Feb 17-19 shows critical clustering. Consider starting assignments early or requesting deadline extensions where possible.
-                </p>
-              </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No deadline clustering detected</p>
+              <p className="text-sm">Your deadlines are well distributed</p>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

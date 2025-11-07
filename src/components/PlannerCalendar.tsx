@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
@@ -15,21 +16,7 @@ import { eventsAPI } from "@/services/api";
 import { TimetableDialog } from "./TimetableDialog";
 import { BulkTimetableUpload } from "./BulkTimetableUpload";
 import { WorkloadBalancer } from "./WorkloadBalancer";
-
-export interface PlannerEvent {
-  id: string;
-  title: string;
-  description: string;
-  date: Date;
-  type: "class" | "assignment" | "deadline" | "quiz" | "exam" | "study";
-  time?: string;
-  priority?: "low" | "medium" | "high";
-  reminders?: string[];
-  isRecurring?: boolean;
-  recurringDays?: number[]; // 0-6 for Sunday-Saturday
-  courseCode?: string;
-  location?: string;
-}
+import { PlannerEvent } from "@/types";
 
 const eventTypeIcons = {
   class: BookOpen,

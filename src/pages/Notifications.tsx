@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,16 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Bell, BellOff, Check, X, Calendar, BookOpen, Target, Clock, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { notificationsAPI } from "@/services/api";
-
-interface Notification {
-  id: string;
-  type: 'assignment' | 'deadline' | 'gpa' | 'reminder' | 'system';
-  title: string;
-  message: string;
-  timestamp: Date;
-  read: boolean;
-  urgent?: boolean;
-}
+import { Notification } from "@/types";
 
 const Notifications = () => {
   const { toast } = useToast();
@@ -32,7 +24,7 @@ const Notifications = () => {
         const backendNotifications = await notificationsAPI.getNotifications();
         
         // Convert backend notifications to Notification format
-        const formattedNotifications: Notification[] = backendNotifications.map((notification: any) => ({
+        const formattedNotifications: Notification[] = (backendNotifications || []).map((notification: any) => ({
           id: notification.id.toString(),
           type: notification.type,
           title: notification.title,

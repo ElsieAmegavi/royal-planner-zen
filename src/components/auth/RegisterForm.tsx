@@ -9,10 +9,7 @@ import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { authAPI } from "@/services/api";
 
-interface RegisterFormProps {
-  onSwitchToLogin: () => void;
-  onRegisterSuccess: () => void;
-}
+import { RegisterFormProps } from "@/types";
 
 export const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }: RegisterFormProps) => {
   const [formData, setFormData] = useState({

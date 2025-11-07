@@ -3,8 +3,7 @@ import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import heroImage from "@/assets/hero-image.jpg";
-
-type AuthMode = "login" | "register" | "forgot-password";
+import { AuthMode } from "@/types";
 
 const Auth = () => {
   const [mode, setMode] = useState<AuthMode>("login");

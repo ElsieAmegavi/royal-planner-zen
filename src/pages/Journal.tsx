@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { JournalEntryCard, JournalFormDialog, JournalEntry } from "@/components/JournalEntry";
+import { JournalEntryCard, JournalFormDialog } from "@/components/JournalEntry";
+import { JournalEntry } from "@/types";
 import { Plus, BookOpen } from "lucide-react";
 import { journalAPI } from "@/services/api";
 
@@ -39,7 +41,7 @@ const Journal = () => {
       setIsLoading(true);
       try {
         const response = await journalAPI.getEntries();
-        setEntries(response);
+        setEntries(Array.isArray(response) ? response : []);
       } catch (error) {
         console.error('Failed to load journal entries from backend:', error);
         
@@ -136,14 +138,13 @@ const Journal = () => {
   };
 
   // Calculate mood insights
-  const moodCounts = entries.reduce((acc, entry) => {
+  const moodCounts = (entries || []).reduce((acc, entry) => {
     acc[entry.mood] = (acc[entry.mood] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  const totalEntries = entries.length;
-  const thisMonthEntries = entries.filter(entry => {
-    console.log(entry.date);
+  const totalEntries = (entries || []).length;
+  const thisMonthEntries = (entries || []).filter(entry => {
     const entryMonth = new Date(entry.date).getMonth();
     const currentMonth = new Date().getMonth();
     return entryMonth === currentMonth;
@@ -183,7 +184,7 @@ const Journal = () => {
               <div className="mb-6">
                 <h2 className="text-xl font-semibold mb-4">Your Entries</h2>
                 <div>
-                  {entries.length === 0 ? (
+                  {(entries || []).length === 0 ? (
                     <Card>
                       <CardContent className="p-8 text-center">
                         <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -198,7 +199,7 @@ const Journal = () => {
                       </CardContent>
                     </Card>
                   ) : (
-                    entries.map((entry) => (
+                    (entries || []).map((entry) => (
                       <JournalEntryCard
                         key={entry.id}
                         entry={entry}

@@ -7,12 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { authAPI } from "@/services/api";
-
-interface LoginFormProps {
-  onSwitchToRegister: () => void;
-  onSwitchToForgotPassword: () => void;
-  onLoginSuccess: () => void;
-}
+import { LoginFormProps } from "@/types";
 
 export const LoginForm = ({ onSwitchToRegister, onSwitchToForgotPassword, onLoginSuccess }: LoginFormProps) => {
   const [email, setEmail] = useState("");

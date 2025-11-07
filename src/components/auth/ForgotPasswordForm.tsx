@@ -5,10 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, GraduationCap, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-interface ForgotPasswordFormProps {
-  onBackToLogin: () => void;
-}
+import { ForgotPasswordFormProps } from "@/types";
 
 export const ForgotPasswordForm = ({ onBackToLogin }: ForgotPasswordFormProps) => {
   const [email, setEmail] = useState("");

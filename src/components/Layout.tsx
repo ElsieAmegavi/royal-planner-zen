@@ -1,9 +1,6 @@
 import { ReactNode } from "react";
 import { Navigation } from "./Navigation";
-
-interface LayoutProps {
-  children: ReactNode;
-}
+import { LayoutProps } from "@/types";
 
 export const Layout = ({ children }: LayoutProps) => {
   return (

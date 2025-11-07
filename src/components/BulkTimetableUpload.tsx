@@ -8,21 +8,7 @@ import { Upload, Download, FileSpreadsheet, AlertCircle, Check } from "lucide-re
 import { useToast } from "@/hooks/use-toast";
 import Papa from 'papaparse';
 
-interface TimetableEntry {
-  courseName: string;
-  courseCode: string;
-  instructor: string;
-  day: string;
-  startTime: string;
-  endTime: string;
-  location: string;
-  semester: string;
-  year: string;
-}
-
-interface BulkTimetableUploadProps {
-  onUpload: (entries: TimetableEntry[]) => void;
-}
+import { TimetableEntry, BulkTimetableUploadProps } from "@/types";
 
 export const BulkTimetableUpload: React.FC<BulkTimetableUploadProps> = ({ onUpload }) => {
   const [isOpen, setIsOpen] = useState(false);

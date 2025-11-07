@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { User, GraduationCap, Bell, Palette, Download, RotateCcw, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { profileAPI, gradeSettingsAPI, notificationSettingsAPI } from "@/services/api";
+import { profileAPI, gradeSettingsAPI, notificationSettingsAPI, connectionAPI } from "@/services/api";
 
 const Settings = () => {
   const [profile, setProfile] = useState({
@@ -48,53 +48,72 @@ const Settings = () => {
 
   useEffect(() => {
     const loadSettings = async () => {
+      setIsLoading(true);
+      let isOfflineMode = false;
+      let hasBackendConnection = false;
+      
       try {
-        setIsLoading(true);
-        
-        // Load profile from backend
-        const backendProfile = await profileAPI.getProfile();
-        setProfile({
-          name: backendProfile.name || "",
-          email: backendProfile.email || "",
-          academicLevel: backendProfile.academicLevel || "",
-          academicYears: backendProfile.academicYears?.toString() || "4"
-        });
-        
-        // Load grade settings from backend
-        const backendGradeSettings = await gradeSettingsAPI.getGradeSettings();
-        console.log('Loaded grade settings from API:', backendGradeSettings);
-        setGradeSettings(backendGradeSettings);
-        
-        // Load notification settings from backend
-        const backendNotifications = await notificationSettingsAPI.getNotificationSettings();
-        setNotifications({
-          assignments: backendNotifications.assignments,
-          deadlines: backendNotifications.deadlines,
-          gpaUpdates: backendNotifications.gpaUpdates,
-          weeklyReports: backendNotifications.weeklyReports
-        });
-        
-        setNotificationTimings({
-          assignmentFrequency: backendNotifications.assignmentFrequency,
-          deadlineTimings: JSON.parse(backendNotifications.deadlineTimings)
-        });
-        
+        // Test backend connection first
+        hasBackendConnection = await connectionAPI.testConnection();
+        if (!hasBackendConnection) {
+          isOfflineMode = true;
+        }
       } catch (error) {
-        console.error('Failed to load settings from backend:', error);
-        
-        // Fallback to localStorage
-        const savedProfile = localStorage.getItem('userProfile');
-        if (savedProfile) {
-          setProfile(JSON.parse(savedProfile));
+        // Backend connection test failed
+        isOfflineMode = true;
+      }
+      
+      if (hasBackendConnection) {
+        try {
+          // Load profile from backend
+          const backendProfile = await profileAPI.getProfile();
+          if (backendProfile) {
+            setProfile({
+              name: backendProfile.name || "",
+              email: backendProfile.email || "",
+              academicLevel: backendProfile.academic_level || "",
+              academicYears: backendProfile.academic_years?.toString() || "4"
+            });
+          } else {
+            // If no profile returned, use localStorage fallback
+            const savedProfile = localStorage.getItem('userProfile');
+            if (savedProfile) {
+              setProfile(JSON.parse(savedProfile));
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load profile from backend:', error);
+          // Fallback to localStorage for profile only
+          const savedProfile = localStorage.getItem('userProfile');
+          if (savedProfile) {
+            setProfile(JSON.parse(savedProfile));
+          }
         }
         
-        // Try to load grade settings from API as fallback
         try {
-          const fallbackGradeSettings = await gradeSettingsAPI.getGradeSettings();
-          setGradeSettings(fallbackGradeSettings);
-        } catch (gradeError) {
-          console.error('Failed to load grade settings from API:', gradeError);
-          // Only use localStorage as last resort
+          // Load grade settings from backend
+          const backendGradeSettings = await gradeSettingsAPI.getGradeSettings();
+          if (backendGradeSettings) {
+            setGradeSettings(backendGradeSettings);
+          } else {
+            // If no grade settings returned, use localStorage fallback
+            const savedGrades = localStorage.getItem('gradeSettings');
+            if (savedGrades) {
+              setGradeSettings(JSON.parse(savedGrades));
+            } else {
+              // Default grade settings
+              const defaultGrades = {
+                "A+": 4.0, "A": 4.0, "A-": 3.7,
+                "B+": 3.3, "B": 3.0, "B-": 2.7,
+                "C+": 2.3, "C": 2.0, "C-": 1.7,
+                "D+": 1.3, "D": 1.0, "F": 0.0
+              };
+              setGradeSettings(defaultGrades);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load grade settings from backend:', error);
+          // Fallback to localStorage for grade settings only
           const savedGrades = localStorage.getItem('gradeSettings');
           if (savedGrades) {
             setGradeSettings(JSON.parse(savedGrades));
@@ -110,19 +129,88 @@ const Settings = () => {
           }
         }
         
+        try {
+          // Load notification settings from backend
+          const backendNotifications = await notificationSettingsAPI.getNotificationSettings();
+          if (backendNotifications) {
+            setNotifications({
+              assignments: backendNotifications.assignments,
+              deadlines: backendNotifications.deadlines,
+              gpaUpdates: backendNotifications.gpa_updates,
+              weeklyReports: backendNotifications.weekly_reports
+            });
+            
+            setNotificationTimings({
+              assignmentFrequency: backendNotifications.assignment_frequency,
+              deadlineTimings: JSON.parse(backendNotifications.deadline_timings)
+            });
+          } else {
+            // If no notification settings returned, use localStorage fallback
+            const savedNotifications = localStorage.getItem('notificationSettings');
+            if (savedNotifications) {
+              setNotifications(JSON.parse(savedNotifications));
+            }
+            
+            const savedNotificationTimings = localStorage.getItem('notificationTimings');
+            if (savedNotificationTimings) {
+              setNotificationTimings(JSON.parse(savedNotificationTimings));
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load notification settings from backend:', error);
+          // Fallback to localStorage for notification settings only
+          const savedNotifications = localStorage.getItem('notificationSettings');
+          if (savedNotifications) {
+            setNotifications(JSON.parse(savedNotifications));
+          }
+          
+          const savedNotificationTimings = localStorage.getItem('notificationTimings');
+          if (savedNotificationTimings) {
+            setNotificationTimings(JSON.parse(savedNotificationTimings));
+          }
+        }
+      } else {
+        // Complete offline mode - load everything from localStorage
+        const savedProfile = localStorage.getItem('userProfile');
+        if (savedProfile) {
+          setProfile(JSON.parse(savedProfile));
+        }
+        
+        const savedGrades = localStorage.getItem('gradeSettings');
+        if (savedGrades) {
+          setGradeSettings(JSON.parse(savedGrades));
+        } else {
+          // Default grade settings
+          const defaultGrades = {
+            "A+": 4.0, "A": 4.0, "A-": 3.7,
+            "B+": 3.3, "B": 3.0, "B-": 2.7,
+            "C+": 2.3, "C": 2.0, "C-": 1.7,
+            "D+": 1.3, "D": 1.0, "F": 0.0
+          };
+          setGradeSettings(defaultGrades);
+        }
+        
         const savedNotifications = localStorage.getItem('notificationSettings');
         if (savedNotifications) {
           setNotifications(JSON.parse(savedNotifications));
         }
         
+        const savedNotificationTimings = localStorage.getItem('notificationTimings');
+        if (savedNotificationTimings) {
+          setNotificationTimings(JSON.parse(savedNotificationTimings));
+        }
+      }
+      
+      // Only show offline mode message if backend is completely unreachable
+      if (isOfflineMode) {
         toast({
           title: "Offline Mode",
           description: "Using cached settings. Some features may be limited.",
           variant: "destructive"
         });
-      } finally {
-        setIsLoading(false);
       }
+      
+      setIsLoading(false);
     };
     
     loadSettings();
@@ -355,7 +443,7 @@ const Settings = () => {
     }
   };
 
-  const changePassword = () => {
+  const changePassword = async () => {
     if (security.newPassword !== security.confirmPassword) {
       toast({
         title: "Password Mismatch",
@@ -374,12 +462,37 @@ const Settings = () => {
       return;
     }
 
-    // In a real app, verify current password first
-    setSecurity(prev => ({ ...prev, currentPassword: "", newPassword: "", confirmPassword: "" }));
-    toast({
-      title: "Password Changed",
-      description: "Your password has been updated successfully."
-    });
+    if (!security.currentPassword) {
+      toast({
+        title: "Current Password Required",
+        description: "Please enter your current password",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Call the API to change password
+      await profileAPI.changePassword({
+        currentPassword: security.currentPassword,
+        newPassword: security.newPassword
+      });
+      
+      // Clear the form
+      setSecurity(prev => ({ ...prev, currentPassword: "", newPassword: "", confirmPassword: "" }));
+      
+      toast({
+        title: "Password Changed",
+        description: "Your password has been updated successfully."
+      });
+    } catch (error) {
+      console.error('Failed to change password:', error);
+      toast({
+        title: "Password Change Failed",
+        description: error instanceof Error ? error.message : "Failed to change password. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const resetAllData = () => {

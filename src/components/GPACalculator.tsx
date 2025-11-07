@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,29 +9,13 @@ import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, Award, TrendingUp, Settings, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { semestersAPI, gradeSettingsAPI } from "@/services/api";
+import { Course, SemesterData } from "@/types";
 import jsPDF from 'jspdf';
-
-interface Course {
-  id: string;
-  name: string;
-  credits: number;
-  grade: string;
-  points: number;
-}
-
-interface SemesterData {
-  id: string;
-  year: number;
-  semester: number;
-  courses: Course[];
-  gpa: number;
-}
 
 const getGradePoints = async (): Promise<{ [key: string]: number }> => {
   try {
     const gradeSettings = await gradeSettingsAPI.getGradeSettings();
-    console.log('inside getGradePoints gradeSettings:', gradeSettings);
-    return gradeSettings;
+    return gradeSettings || {};
   } catch (error) {
     console.error('Failed to load grade settings:', error);
     // Fallback to localStorage
@@ -58,26 +42,112 @@ export const GPACalculator = () => {
   const [gradePoints, setGradePoints] = useState<{ [key: string]: number }>({});
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const hasLoadedRef = useRef(false);
 
+
+  // Helper function to find the latest semester with courses
+  const findLatestSemesterWithCourses = (semesters: SemesterData[]): string | null => {
+    // Filter semesters that have courses
+    const semestersWithCourses = semesters.filter(semester => 
+      semester.courses && semester.courses.length > 0
+    );
+    
+    if (semestersWithCourses.length === 0) {
+      return null;
+    }
+    
+    // Sort by year and semester to find the latest
+    const sortedSemesters = semestersWithCourses.sort((a, b) => {
+      if (a.year !== b.year) {
+        return b.year - a.year; // Latest year first
+      }
+      return b.semester - a.semester; // Latest semester first
+    });
+    
+    return sortedSemesters[0].id;
+  };
 
   // Load data on component mount
   useEffect(() => {
+    if (hasLoadedRef.current) return; // Prevent multiple loads
+    
+    const createFirstSemester = async () => {
+      try {
+        // Create Year 1, Semester 1
+        const createdSemester = await semestersAPI.createSemester({
+          year: 1,
+          semester: 1
+        });
+        
+        const newSemester = {
+          id: createdSemester.id.toString(),
+          year: 1,
+          semester: 1,
+          courses: [],
+          gpa: 0
+        };
+        
+        setSemesters([newSemester]);
+        setCurrentSemester(createdSemester.id.toString());
+        setCurrentSemesterData(newSemester);
+        
+        // Save to localStorage
+        localStorage.setItem('semesterData', JSON.stringify([newSemester]));
+        
+        toast({
+          title: "First Semester Created",
+          description: "Year 1 - Semester 1 has been created for you."
+        });
+      } catch (error) {
+        console.error('Failed to create first semester:', error);
+        toast({
+          title: "Error",
+          description: "Failed to create semester. Please try again.",
+          variant: "destructive"
+        });
+      }
+    };
+    
     const loadData = async () => {
       try {
         setIsLoading(true);
+        hasLoadedRef.current = true;
+        
+        // Clean up any existing duplicates first
+        try {
+          await semestersAPI.cleanupDuplicates();
+        } catch (error) {
+          // Silently handle cleanup failures
+        }
         
         // Load semesters from backend (now includes courses)
         const backendSemesters = await semestersAPI.getSemesters();
-        console.log('Loaded semesters with courses:', backendSemesters);
-        setSemesters(backendSemesters);
-
-        if (backendSemesters.length > 0 && !currentSemester) {
-          setCurrentSemester(backendSemesters[backendSemesters.length - 1].id.toString());
+        
+        if (backendSemesters && backendSemesters.length > 0) {
+          // We have existing semesters, use them
+          setSemesters(backendSemesters);
+          
+          // Set semesters data
+          
+          // Auto-select the latest semester with courses
+          const latestSemesterWithCourses = findLatestSemesterWithCourses(backendSemesters);
+          
+          if (latestSemesterWithCourses) {
+            setCurrentSemester(latestSemesterWithCourses);
+            const selectedSemesterData = backendSemesters.find(s => s.id === latestSemesterWithCourses);
+            setCurrentSemesterData(selectedSemesterData || null);
+          } else {
+            // If no semesters have courses, select the last semester
+            setCurrentSemester(backendSemesters[backendSemesters.length - 1].id.toString());
+            setCurrentSemesterData(backendSemesters[backendSemesters.length - 1]);
+          }
+        } else {
+          // No semesters exist, create the first one
+          await createFirstSemester();
         }
         
         // Load grade settings from backend
         const gradeSettings = await getGradePoints();
-        console.log('gradeSettings:', gradeSettings);
         setGradePoints(gradeSettings);
         
       } catch (error) {
@@ -88,12 +158,24 @@ export const GPACalculator = () => {
         if (savedSemesters) {
           const parsed = JSON.parse(savedSemesters);
           setSemesters(parsed);
-          if (parsed.length > 0 && !currentSemester) {
-            setCurrentSemester(parsed[parsed.length - 1].id);
+          
+          if (parsed.length > 0) {
+            const latestSemesterWithCourses = findLatestSemesterWithCourses(parsed);
+            
+            if (latestSemesterWithCourses) {
+              setCurrentSemester(latestSemesterWithCourses);
+              const selectedSemesterData = parsed.find(s => s.id === latestSemesterWithCourses);
+              setCurrentSemesterData(selectedSemesterData || null);
+            } else {
+              setCurrentSemester(parsed[parsed.length - 1].id);
+              setCurrentSemesterData(parsed[parsed.length - 1]);
+            }
           }
         }
         
         const gradeSettings = await getGradePoints();
+        console.log('Fallback gradeSettings loaded:', gradeSettings);
+        console.log('Fallback gradeSettings keys:', Object.keys(gradeSettings));
         setGradePoints(gradeSettings);
         
         toast({
@@ -107,13 +189,26 @@ export const GPACalculator = () => {
     };
     
     loadData();
-  }, [currentSemester, toast]);
+  }, [toast]); // Include toast dependency
 
   const getCurrentSemesterData = (selectedSemester: string) => {
-    return semesters.find(s => s.id === selectedSemester);
+    const result = (semesters || []).find(s => s.id === selectedSemester);
+    return result;
   };
 
-  const generateSemesters = () => {
+  // Update current semester data when it changes
+  useEffect(() => {
+    if (currentSemesterData) {
+      // Semester data is available
+    }
+  }, [currentSemesterData]);
+
+  // Update grade points when they change
+  useEffect(() => {
+    // Grade points are available
+  }, [gradePoints]);
+
+  const generateSemesters = useCallback(() => {
     const savedYears = localStorage.getItem('academicYears') || '4';
     const years = parseInt(savedYears);
     const semesterList = [];
@@ -121,7 +216,7 @@ export const GPACalculator = () => {
     for (let year = 1; year <= years; year++) {
       for (let sem = 1; sem <= 2; sem++) {
         const id = `${year}-${sem}`;
-        if (!semesters.find(s => s.id === id)) {
+        if (!(semesters || []).find(s => s.id === id)) {
           semesterList.push({
             id,
             year,
@@ -133,17 +228,15 @@ export const GPACalculator = () => {
       }
     }
     return semesterList;
-  };
+  }, [semesters]);
 
   const handleSemesterChange = (selectedSemester: string) => {
     setCurrentSemester(selectedSemester);
     const currentSemesterResult = getCurrentSemesterData(selectedSemester);
-    console.log('Current semester data:', currentSemesterResult);
-    setCurrentSemesterData(currentSemesterResult);
-    console.log('Selected semester value:', selectedSemester);
+    setCurrentSemesterData(currentSemesterResult || null);
   };
 
-  const addNewSemester = async () => {
+  const addNewSemester = useCallback(async () => {
     try {
       const newSemesters = generateSemesters();
       if (newSemesters.length === 0) {
@@ -155,23 +248,35 @@ export const GPACalculator = () => {
         return;
       }
 
-      // Add semesters to backend
-      for (const semester of newSemesters) {
-        await semestersAPI.createSemester({
-          year: semester.year,
-          semester: semester.semester
-        });
-      }
+      // Only create the first missing semester to avoid duplicates
+      const firstNewSemester = newSemesters[0];
+      
+      // Create semester in backend
+      const createdSemester = await semestersAPI.createSemester({
+        year: firstNewSemester.year,
+        semester: firstNewSemester.semester
+      });
+
+      // Update the semester with the actual ID from backend
+      const semesterWithId = {
+        ...firstNewSemester,
+        id: createdSemester.id.toString()
+      };
 
       // Update local state
-      setSemesters(prev => [...prev, ...newSemesters]);
+      setSemesters(prev => [...(prev || []), semesterWithId]);
       if (!currentSemester) {
-        setCurrentSemester(newSemesters[0].id);
+        setCurrentSemester(createdSemester.id.toString());
+        setCurrentSemesterData(semesterWithId);
       }
       
+      // Save to localStorage
+      const updatedSemesters = [...(semesters || []), semesterWithId];
+      localStorage.setItem('semesterData', JSON.stringify(updatedSemesters));
+      
       toast({
-        title: "Semesters Added",
-        description: `${newSemesters.length} new semester(s) created successfully`
+        title: "Semester Added",
+        description: `Year ${firstNewSemester.year} - Semester ${firstNewSemester.semester} created successfully`
       });
     } catch (error) {
       console.error('Failed to add semester:', error);
@@ -181,28 +286,8 @@ export const GPACalculator = () => {
         variant: "destructive"
       });
     }
-  };
+  }, [toast, generateSemesters, currentSemester, semesters]);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const backendSemesters = await semestersAPI.getSemesters();
-        console.log('Second load - semesters with courses:', backendSemesters);
-        setSemesters(backendSemesters);
-        
-        if (backendSemesters.length > 0 && !currentSemester) {
-          setCurrentSemester(backendSemesters[backendSemesters.length - 1].id.toString());
-        }
-        
-        if (backendSemesters.length === 0) {
-          addNewSemester();
-        }
-      } catch (error) {
-        console.error('Failed to load semesters:', error);
-      }
-    };
-    loadData();
-  }, [currentSemester]);
 
   const addCourse = async () => {
     if (!courseName || !credits || !selectedGrade || !currentSemester) {
@@ -215,26 +300,61 @@ export const GPACalculator = () => {
     }
 
     try {
+      // Add course to backend and get the response with the actual database ID
+      const response = await semestersAPI.addCourse(parseInt(currentSemester), {
+        name: courseName,
+        credits: parseFloat(credits),
+        grade: selectedGrade,
+        points: gradePoints[selectedGrade]
+      });
+
+
+      // Create the new course object with the actual database ID
       const newCourse: Course = {
-        id: Date.now().toString(),
+        id: response.id.toString(),
         name: courseName,
         credits: parseFloat(credits),
         grade: selectedGrade,
         points: gradePoints[selectedGrade]
       };
 
-      // Add course to backend
-      await semestersAPI.addCourse(parseInt(currentSemester), {
-        name: newCourse.name,
-        credits: newCourse.credits,
-        grade: newCourse.grade,
-        points: newCourse.points
+      // Update the semesters state immediately with the new course
+      setSemesters(prevSemesters => {
+        return prevSemesters.map(semester => {
+          if (semester.id === currentSemester) {
+            const updatedCourses = [...(semester.courses || []), newCourse];
+            const totalPoints = updatedCourses.reduce((sum, course) => sum + (course.points * course.credits), 0);
+            const totalCredits = updatedCourses.reduce((sum, course) => sum + course.credits, 0);
+            const newGPA = totalCredits > 0 ? totalPoints / totalCredits : 0;
+            
+            return {
+              ...semester,
+              courses: updatedCourses,
+              gpa: newGPA
+            };
+          }
+          return semester;
+        });
       });
 
-      // Refresh semesters data from API to get updated courses and GPA
-      const updatedSemesters = await semestersAPI.getSemesters();
-      setSemesters(updatedSemesters);
+      // Update currentSemesterData to show the new course immediately
+      setCurrentSemesterData(prevData => {
+        if (prevData && prevData.id === currentSemester) {
+          const updatedCourses = [...(prevData.courses || []), newCourse];
+          const totalPoints = updatedCourses.reduce((sum, course) => sum + (course.points * course.credits), 0);
+          const totalCredits = updatedCourses.reduce((sum, course) => sum + course.credits, 0);
+          const newGPA = totalCredits > 0 ? totalPoints / totalCredits : 0;
+          
+          return {
+            ...prevData,
+            courses: updatedCourses,
+            gpa: newGPA
+          };
+        }
+        return prevData;
+      });
 
+      // Clear form fields
       setCourseName("");
       setCredits("");
       setSelectedGrade("");
@@ -258,9 +378,41 @@ export const GPACalculator = () => {
       // Remove course from backend
       await semestersAPI.deleteCourse(parseInt(courseId));
 
-      // Refresh semesters data from API to get updated courses and GPA
-      const updatedSemesters = await semestersAPI.getSemesters();
-      setSemesters(updatedSemesters);
+      // Update the semesters state immediately by removing the course
+      setSemesters(prevSemesters => {
+        return prevSemesters.map(semester => {
+          if (semester.id === currentSemester) {
+            const updatedCourses = (semester.courses || []).filter(course => course.id !== courseId);
+            const totalPoints = updatedCourses.reduce((sum, course) => sum + (course.points * course.credits), 0);
+            const totalCredits = updatedCourses.reduce((sum, course) => sum + course.credits, 0);
+            const newGPA = totalCredits > 0 ? totalPoints / totalCredits : 0;
+            
+            return {
+              ...semester,
+              courses: updatedCourses,
+              gpa: newGPA
+            };
+          }
+          return semester;
+        });
+      });
+
+      // Update currentSemesterData to remove the course immediately
+      setCurrentSemesterData(prevData => {
+        if (prevData && prevData.id === currentSemester) {
+          const updatedCourses = (prevData.courses || []).filter(course => course.id !== courseId);
+          const totalPoints = updatedCourses.reduce((sum, course) => sum + (course.points * course.credits), 0);
+          const totalCredits = updatedCourses.reduce((sum, course) => sum + course.credits, 0);
+          const newGPA = totalCredits > 0 ? totalPoints / totalCredits : 0;
+          
+          return {
+            ...prevData,
+            courses: updatedCourses,
+            gpa: newGPA
+          };
+        }
+        return prevData;
+      });
 
       toast({
         title: "Course Removed",
@@ -278,7 +430,6 @@ export const GPACalculator = () => {
 
   const calculateSemesterGPA = (courses: Course[]) => {
     if (courses.length === 0) return 0;
-    // console.log(courses);
     const totalPoints = courses.reduce((sum, course) => sum + (course.points * course.credits), 0);
     const totalCredits = courses.reduce((sum, course) => sum + course.credits, 0);
     
@@ -306,12 +457,12 @@ export const GPACalculator = () => {
     doc.text('Academic Summary', 20, 50);
     doc.setFontSize(12);
     doc.text(`Cumulative GPA: ${calculateCumulativeGPA().toFixed(2)}`, 20, 60);
-    doc.text(`Total Credits: ${semesters.flatMap(s => s.courses).reduce((sum, course) => sum + course.credits, 0)}`, 20, 70);
-    doc.text(`Total Semesters: ${semesters.length}`, 20, 80);
+    doc.text(`Total Credits: ${(semesters || []).flatMap(s => s.courses).reduce((sum, course) => sum + course.credits, 0)}`, 20, 70);
+    doc.text(`Total Semesters: ${(semesters || []).length}`, 20, 80);
     
     let yPosition = 100;
     
-    semesters.forEach((semester, index) => {
+    (semesters || []).forEach((semester, index) => {
       if (yPosition > 250) {
         doc.addPage();
         yPosition = 20;
@@ -410,7 +561,7 @@ export const GPACalculator = () => {
                     <SelectValue placeholder="Select semester" />
                   </SelectTrigger>
                   <SelectContent>
-                    {semesters.map((semester) => (
+                    {(semesters || []).map((semester) => (
                       <SelectItem key={semester.id} value={semester.id}>
                         Year {semester.year} - Semester {semester.semester}
                       </SelectItem>
@@ -554,8 +705,8 @@ export const GPACalculator = () => {
                   <p>No courses added yet. Start by adding your first course above!</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {currentSemesterData.courses?.map((course) => (
+                  <div className="space-y-3">
+                    {currentSemesterData.courses?.map((course) => (
                     <div 
                       key={course.id}
                       className="flex items-center justify-between p-4 bg-secondary rounded-lg border"
@@ -583,9 +734,9 @@ export const GPACalculator = () => {
                         </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
             </CardContent>
           </Card>
 
@@ -597,7 +748,7 @@ export const GPACalculator = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {semesters.map((semester) => (
+                {(semesters || []).map((semester) => (
                   <div
                     key={semester.id}
                     className={`p-4 rounded-lg border transition-all cursor-pointer ${
@@ -605,7 +756,7 @@ export const GPACalculator = () => {
                         ? 'bg-primary/10 border-primary' 
                         : 'bg-secondary hover:bg-secondary/80'
                     }`}
-                    onClick={() => setCurrentSemester(semester.id)}
+                    onClick={() => handleSemesterChange(semester.id)}
                   >
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-medium">
