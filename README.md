@@ -7,6 +7,20 @@ A comprehensive academic planning and management application designed to help st
 
 Royal Planner is a modern web application built for students who want to take control of their academic journey. The application provides powerful tools for GPA calculation, semester planning, journaling, and academic analytics.
 
+## Current Status & Deployment
+
+**Full task tracker — what's done, what's pending, what needs a decision —
+lives in `royal_planner_flutter/PROJECT_STATUS.md` (sibling folder). Read
+that file before picking up any work here or in the Flutter app.**
+
+Quick facts about this specific repo:
+- Backend is live on Render (free tier): `https://royal-planner-zen.onrender.com`
+  — `GET /api/health` should return `{"status":"ok"}`.
+- Database is Postgres (migrated from SQLite — see `backend/database/connection.js`),
+  also on Render's free tier. **That free Postgres instance expires 2026-10-01**
+  unless upgraded before then — check `PROJECT_STATUS.md` for what that means.
+- `backend/royal_planner.db` (old SQLite file) is no longer used by anything.
+
 ## Features
 
 - **GPA Calculator**: Track semester and cumulative GPA with detailed course management
