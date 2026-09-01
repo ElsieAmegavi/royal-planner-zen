@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../database/connection');
 const { sendResponse } = require('../middleware/auth');
+const { JWT_SECRET } = require('../config');
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ router.post('/register', async (req, res) => {
           // Create default notification settings
           db.run('INSERT INTO notification_settings (user_id) VALUES (?)', [this.lastID]);
 
-          const token = jwt.sign({ userId: this.lastID, email }, process.env.JWT_SECRET || 'royal-planner-secret');
+          const token = jwt.sign({ userId: this.lastID, email }, JWT_SECRET);
           sendResponse(res, true, 'User registered successfully', { 
             token, 
             user: { id: this.lastID, email, name: fullName } 
@@ -77,7 +78,7 @@ router.post('/login', (req, res) => {
       return sendResponse(res, false, 'Invalid credentials', null, 401);
     }
 
-    const token = jwt.sign({ userId: user.id, email }, process.env.JWT_SECRET || 'royal-planner-secret');
+    const token = jwt.sign({ userId: user.id, email }, JWT_SECRET);
     sendResponse(res, true, 'Login successful', { 
       token, 
       user: { id: user.id, email: user.email, name: user.name } 

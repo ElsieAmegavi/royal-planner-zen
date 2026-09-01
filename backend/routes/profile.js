@@ -77,4 +77,34 @@ router.put('/password', authenticateToken, async (req, res) => {
   }
 });
 
+// Delete account and all associated data
+router.delete('/', authenticateToken, (req, res) => {
+  const userId = req.user.userId;
+
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+    db.run('DELETE FROM courses WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM semesters WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM grade_settings WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM planner_events WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM journal_entries WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM target_grades WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM notifications WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM notification_settings WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM user_profiles WHERE user_id = ?', [userId]);
+    db.run('DELETE FROM users WHERE id = ?', [userId], function(err) {
+      if (err) {
+        db.run('ROLLBACK');
+        return sendResponse(res, false, 'Failed to delete account', null, 500);
+      }
+      db.run('COMMIT', (commitErr) => {
+        if (commitErr) {
+          return sendResponse(res, false, 'Failed to delete account', null, 500);
+        }
+        sendResponse(res, true, 'Account deleted successfully');
+      });
+    });
+  });
+});
+
 module.exports = router;

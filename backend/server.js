@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const db = require('./database/connection');
 const { initializeDatabase } = require('./database/init');
+const { PORT, CORS_ORIGIN } = require('./config');
 
 // Import route modules
 const authRoutes = require('./routes/auth');
@@ -15,11 +16,10 @@ const notificationRoutes = require('./routes/notifications');
 const analyticsRoutes = require('./routes/analytics');
 
 const app = express();
-const PORT = 3001;
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:8080', // Frontend URL
+  origin: CORS_ORIGIN,
   credentials: true
 }));
 
@@ -28,6 +28,11 @@ app.use(express.urlencoded({ extended: true }));
 
 // Initialize database
 initializeDatabase();
+
+// Health check (used by hosting platforms)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 // API Routes
 app.use('/api/auth', authRoutes);

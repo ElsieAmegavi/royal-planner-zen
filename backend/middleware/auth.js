@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../config');
 
 // Standardized API response helper
 const sendResponse = (res, success, message, data = null, statusCode = 200) => {
@@ -19,9 +20,9 @@ const authenticateToken = (req, res, next) => {
     return sendResponse(res, false, 'Access token required', null, 401);
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'royal-planner-secret', (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return sendResponse(res, false, 'Invalid token', null, 403);
+      return sendResponse(res, false, 'Invalid token', null, 401);
     }
     req.user = user;
     next();
