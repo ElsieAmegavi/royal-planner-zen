@@ -18,7 +18,7 @@ router.get('/', authenticateToken, (req, res) => {
 router.post('/', authenticateToken, (req, res) => {
   const { title, description, date, type, time, priority, reminders, isRecurring, recurringDays, courseCode, location } = req.body;
   
-  db.run('INSERT INTO planner_events (user_id, title, description, date, type, time, priority, reminders, is_recurring, recurring_days, course_code, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  db.run('INSERT INTO planner_events (user_id, title, description, date, type, time, priority, reminders, is_recurring, recurring_days, course_code, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
     [req.user.userId, title, description, date, type, time, priority, JSON.stringify(reminders), isRecurring, JSON.stringify(recurringDays), courseCode, location], function(err) {
       if (err) {
         return sendResponse(res, false, 'Failed to create event', null, 500);

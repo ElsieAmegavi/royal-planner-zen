@@ -97,7 +97,7 @@ router.post('/', authenticateToken, (req, res) => {
       }
       
       // Create new semester
-      db.run('INSERT INTO semesters (user_id, year, semester) VALUES (?, ?, ?)',
+      db.run('INSERT INTO semesters (user_id, year, semester) VALUES (?, ?, ?) RETURNING id',
         [req.user.userId, year, semester], function(err) {
           if (err) {
             return sendResponse(res, false, 'Failed to create semester', null, 500);
@@ -129,7 +129,7 @@ router.post('/:id/courses', authenticateToken, (req, res) => {
   const semesterId = req.params.id;
   const { name, credits, grade, points } = req.body;
   
-  db.run('INSERT INTO courses (user_id, semester_id, name, credits, grade, points) VALUES (?, ?, ?, ?, ?, ?)',
+  db.run('INSERT INTO courses (user_id, semester_id, name, credits, grade, points) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
     [req.user.userId, semesterId, name, credits, grade, points], function(err) {
       if (err) {
         return sendResponse(res, false, 'Failed to add course', null, 500);

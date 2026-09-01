@@ -23,7 +23,7 @@ router.post('/register', async (req, res) => {
 
       // Hash password and create user
       const hashedPassword = await bcrypt.hash(password, 10);
-      db.run('INSERT INTO users (email, password, name, academic_level) VALUES (?, ?, ?, ?)',
+      db.run('INSERT INTO users (email, password, name, academic_level) VALUES (?, ?, ?, ?) RETURNING id',
         [email, hashedPassword, fullName, academicLevel], function(err) {
           if (err) {
             return sendResponse(res, false, 'Failed to create user', null, 500);

@@ -60,33 +60,33 @@ router.put('/update', authenticateToken, (req, res) => {
 // Bulk update all grade settings
 router.put('/', authenticateToken, (req, res) => {
   const { gradeSettings } = req.body;
-  
+
   // Delete all existing grade settings for this user
   db.run('DELETE FROM grade_settings WHERE user_id = ?', [req.user.userId], function(err) {
     if (err) {
       return sendResponse(res, false, 'Failed to clear existing grade settings', null, 500);
     }
-    
-    // Insert new grade settings
-    const stmt = db.prepare('INSERT INTO grade_settings (user_id, grade, points) VALUES (?, ?, ?)');
-    let completed = 0;
-    const total = Object.keys(gradeSettings).length;
-    
-    if (total === 0) {
+
+    const entries = Object.entries(gradeSettings);
+    if (entries.length === 0) {
       return sendResponse(res, true, 'Grade settings updated successfully');
     }
-    
-    Object.entries(gradeSettings).forEach(([grade, points]) => {
-      stmt.run([req.user.userId, grade, points], function(err) {
-        if (err) {
-          return sendResponse(res, false, 'Failed to save grade settings', null, 500);
-        }
-        completed++;
-        if (completed === total) {
-          stmt.finalize();
-          sendResponse(res, true, 'Grade settings updated successfully');
-        }
-      });
+
+    let completed = 0;
+    let failed = false;
+    entries.forEach(([grade, points]) => {
+      db.run('INSERT INTO grade_settings (user_id, grade, points) VALUES (?, ?, ?)',
+        [req.user.userId, grade, points], function(err) {
+          if (failed) return;
+          if (err) {
+            failed = true;
+            return sendResponse(res, false, 'Failed to save grade settings', null, 500);
+          }
+          completed++;
+          if (completed === entries.length) {
+            sendResponse(res, true, 'Grade settings updated successfully');
+          }
+        });
     });
   });
 });

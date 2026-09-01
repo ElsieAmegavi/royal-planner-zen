@@ -32,7 +32,7 @@ router.get('/', authenticateToken, (req, res) => {
 router.post('/', authenticateToken, (req, res) => {
   const { targetGpa, targetSemester, currentCredits, currentGpa } = req.body;
   
-  db.run('INSERT INTO target_grades (user_id, target_gpa, target_semester, current_credits, current_gpa) VALUES (?, ?, ?, ?, ?)',
+  db.run('INSERT INTO target_grades (user_id, target_gpa, target_semester, current_credits, current_gpa) VALUES (?, ?, ?, ?, ?) RETURNING id',
     [req.user.userId, targetGpa, targetSemester, currentCredits, currentGpa], function(err) {
       if (err) {
         return res.status(500).json({ error: 'Failed to create target grade' });

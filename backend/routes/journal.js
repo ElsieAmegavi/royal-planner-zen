@@ -23,7 +23,7 @@ router.get('/', authenticateToken, (req, res) => {
 router.post('/', authenticateToken, (req, res) => {
   const { title, content, mood, tags, date } = req.body;
   
-  db.run('INSERT INTO journal_entries (user_id, title, content, mood, tags, date) VALUES (?, ?, ?, ?, ?, ?)',
+  db.run('INSERT INTO journal_entries (user_id, title, content, mood, tags, date) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
     [req.user.userId, title, content, mood, JSON.stringify(tags), date], function(err) {
       if (err) {
         return res.status(500).json({ error: 'Failed to create journal entry' });

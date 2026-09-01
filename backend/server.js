@@ -26,9 +26,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize database
-initializeDatabase();
-
 // Health check (used by hosting platforms)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -51,10 +48,19 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Royal Planner Backend server running on port ${PORT}`);
-});
+// Initialize database, then start the server — a Postgres connection is a
+// real network round-trip, so requests must not be accepted before the
+// tables (and their foreign keys) actually exist.
+initializeDatabase()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Royal Planner Backend server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to initialize database:', err.message);
+    process.exit(1);
+  });
 
 // Graceful shutdown
 process.on('SIGINT', () => {

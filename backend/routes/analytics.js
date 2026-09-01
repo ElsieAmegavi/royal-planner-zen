@@ -94,7 +94,7 @@ router.get('/grade-distribution', authenticateToken, (req, res) => {
 
 // Get deadline clustering analysis
 router.get('/deadline-clustering', authenticateToken, (req, res) => {
-  db.all('SELECT date, type, title FROM planner_events WHERE user_id = ? AND type IN ("deadline", "assignment", "exam") ORDER BY date', [req.user.userId], (err, data) => {
+  db.all("SELECT date, type, title FROM planner_events WHERE user_id = ? AND type IN ('deadline', 'assignment', 'exam') ORDER BY date", [req.user.userId], (err, data) => {
     if (err) {
       return sendResponse(res, false, 'Database error', null, 500);
     }
